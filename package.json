@@ -12,7 +12,7 @@
     "meteor",
     "dimple",
     "d3",
-	"charts"
+    "charts"
   ],
   "author": "Sergey Todyshev <stodyshev@gmail.com>",
   "contributors": [
