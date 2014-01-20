@@ -1,4 +1,4 @@
-meteor-dimple
-=============
+# meteor-dimple
 
-dimple package for meteor
+Meteor package for [dimple](http://dimplejs.org/) library.
+
