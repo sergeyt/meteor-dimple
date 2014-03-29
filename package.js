@@ -3,6 +3,6 @@ Package.describe({
 });
 
 Package.on_use(function(api){
-  api.add_files('dimple/dist/dimple.v1.1.3.min.js', 'client');
+  api.add_files('dimple/dist/dimple.v1.1.5.min.js', 'client');
 });
 
