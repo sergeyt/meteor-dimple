@@ -9,6 +9,8 @@ var dimple = {
     aggregateMethod: {}
 };
 
+window.dimple = dimple;
+
 // Wrap all application code in a self-executing function
 (function () {
     "use strict";

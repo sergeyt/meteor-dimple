@@ -4,6 +4,5 @@ Package.describe({
 
 Package.on_use(function(api){
   api.add_files('dimple.js', 'client');
-  api.export('dimple');
 });
 

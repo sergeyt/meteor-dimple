@@ -2,9 +2,9 @@
   "packages":
   {
 	  "d3": {},
-	  "dimple":{
-		  "git": "https://github.com/sergeyt/meteor-dimple.git",
-		  "branch": "master"
+	  "dimple":
+	  {
+		  "path": ".."
 	  }
   }
 }
