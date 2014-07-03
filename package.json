@@ -20,8 +20,8 @@
   ],
   "dependencies": {},
   "devDependencies": {
-    "grunt": "~0.4.1",
+    "grunt": "~0.4",
     "grunt-npm": "~0.0.2",
-    "grunt-bump": "~0.0.7"
+    "grunt-bump": "~0.0.14"
   }
 }
