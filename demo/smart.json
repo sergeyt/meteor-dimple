@@ -2,7 +2,7 @@
   "packages":
   {
 	  "d3": {},
-	  "dimple":
+	  "sergeyt:dimple":
 	  {
 		  "path": ".."
 	  }
