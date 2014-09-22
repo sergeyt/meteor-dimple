@@ -1,8 +1,11 @@
 Package.describe({
-  summary: 'dimple - an object-oriented API for business analytics powered by d3.'
+  name: "sergeyt:dimple",
+  summary: "dimple - an object-oriented API for business analytics powered by d3.",
+  git: "https://github.com/sergeyt/meteor-dimple.git"
 });
 
-Package.on_use(function(api){
-  api.add_files('dimple.js', 'client');
+Package.onUse(function(api){
+  api.versionsFrom("METEOR@0.9.1");
+  api.addFiles("dimple.js", "client");
 });
 

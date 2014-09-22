@@ -3,6 +3,6 @@
   "description": "dimple - an object-oriented API for business analytics powered by d3.",
   "homepage": "https://github.com/sergeyt/meteor-dimple",
   "author": "Sergey Todyshev <stodyshev@gmail.com>",
-  "version": "1.1.5",
+  "version": "2.1.0",
   "git": "https://github.com/sergeyt/meteor-dimple.git"
 }
