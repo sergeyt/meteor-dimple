@@ -1,21 +1,48 @@
-// Copyright: 2013 PMSI-AlignAlytics
+// Copyright: 2014 PMSI-AlignAlytics
 // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
 // Source: /src/objects/begin.js
 
-// Create the stub object
-var dimple = {
-    version: "1.1.5",
-    plot: {},
-    aggregateMethod: {}
-};
-
-window.dimple = dimple;
-
-// Wrap all application code in a self-executing function
-(function () {
+// Wrap all application code in a self-executing function which handles optional AMD/CommonJS publishing
+(function (context, dimple) {
     "use strict";
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    if (typeof exports === "object") {
+        // CommonJS
+        module.exports = dimple(require('d3'));
+    } else {
+        if (typeof define === "function" && define.amd) {
+            // RequireJS | AMD
+            define(["d3"], function (d3) {
+                // publish dimple to the global namespace for backwards compatibility
+                // and define it as an AMD module
+                context.dimple = dimple(d3);
+                return context.dimple;
+            });
+        } else {
+            // No AMD, expect d3 to exist in the current context and publish
+            // dimple to the global namespace
+            if (!context.d3) {
+                if (console && console.warn) {
+                    console.warn("dimple requires d3 to run.  Are you missing a reference to the d3 library?");
+                } else {
+                    throw "dimple requires d3 to run.  Are you missing a reference to the d3 library?";
+                }
+            } else {
+                context.dimple = dimple(context.d3);
+            }
+        }
+    }
+
+}(this, function (d3) {
+    "use strict";
+
+    // Create the stub object
+    var dimple = {
+        version: "2.1.0",
+        plot: {},
+        aggregateMethod: {}
+    };
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/axis/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis
@@ -63,7 +90,19 @@ window.dimple = dimple;
         this.useLog = false;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-logBase
         this.logBase = 10;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-title
+        this.title = undefined;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-clamp
+        this.clamp = true;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-ticks
+        this.ticks = null;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-fontSize
+        this.fontSize = "10px";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-fontFamily
+        this.fontFamily = "sans-serif";
 
+        // If this is a composite axis, store links to all slaves
+        this._slaves = [];
         // The scale determined by the update method
         this._scale = null;
         // The minimum and maximum axis values
@@ -79,13 +118,57 @@ window.dimple = dimple;
         this._groupOrderRules = [];
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_draw.js
         this._draw = null;
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/axis/methods/_getAxisData.js
+        // Get all the datasets which may affect this axis
+        this._getAxisData = function () {
+            var i,
+                series,
+                returnData = [],
+                addChartData = false;
+            if (this.chart && this.chart.series) {
+                for (i = 0; i < this.chart.series.length; i += 1) {
+                    series = this.chart.series[i];
+                    // If the series is related to this axis
+                    if (series[this.position] === this) {
+                        // If the series has its own data set add it to the return array
+                        if (series.data && series.data.length > 0) {
+                            returnData = returnData.concat(series.data);
+                        } else {
+                            addChartData = true;
+                        }
+                    }
+                }
+                if (addChartData && this.chart.data) {
+                    returnData = returnData.concat(this.chart.data);
+                }
+            }
+            return returnData;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/axis/methods/_getFontSize.js
+        this._getFontSize = function () {
+            var fontSize;
+            if (!this.fontSize || this.fontSize.toString().toLowerCase() === "auto") {
+                fontSize = (this.chart._heightPixels() / 35 > 10 ? this.chart._heightPixels() / 35 : 10) + "px";
+            } else if (!isNaN(this.fontSize)) {
+                fontSize = this.fontSize + "px";
+            } else {
+                fontSize = this.fontSize;
+            }
+            return fontSize;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_getFormat.js
         this._getFormat = function () {
@@ -136,7 +219,7 @@ window.dimple = dimple;
             return returnFormat;
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_getTimePeriod.js
         this._getTimePeriod = function () {
@@ -144,7 +227,7 @@ window.dimple = dimple;
             var outPeriod = this.timePeriod,
                 maxPeriods = 30,
                 diff = this._max - this._min;
-            if (this._hasTimeField && (this.timePeriod === null || this.timePeriod === undefined)) {
+            if (this._hasTimeField() && !this.timePeriod) {
                 // Calculate using millisecond values for speed.  Using the date range requires creating an array
                 // which in the case of seconds kills the browser.  All constants are straight sums of milliseconds
                 // except months taken as (86400000 * 365.25) / 12 = 2629800000
@@ -169,7 +252,52 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/axis/methods/getTooltipText.js
+        this._getTooltipText = function (rows, d) {
+            if (this._hasTimeField()) {
+                if (d[this.position + "Field"][0]) {
+                    rows.push(this.timeField + ": " + this._getFormat()(d[this.position + "Field"][0]));
+                }
+            } else if (this._hasCategories()) {
+                // Add the categories
+                this.categoryFields.forEach(function (c, i) {
+                    if (c !== null && c !== undefined && d[this.position + "Field"][i]) {
+                        // If the category name and value match don't display the category name
+                        rows.push(c + (d[this.position + "Field"][i] !== c ? ": " + d[this.position + "Field"][i] : ""));
+                    }
+                }, this);
+            } else if (this._hasMeasure()) {
+                switch (this.position) {
+                case "x":
+                    rows.push(this.measure + ": " + this._getFormat()(d.width));
+                    break;
+                case "y":
+                    rows.push(this.measure + ": " + this._getFormat()(d.height));
+                    break;
+                case "p":
+                    rows.push(this.measure + ": " + this._getFormat()(d.angle) + " (" + (d3.format("%")(d.piePct)) + ")");
+                    break;
+                default:
+                    rows.push(this.measure + ": " + this._getFormat()(d[this.position + "Value"]));
+                    break;
+                }
+            }
+        };
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/axis/methods/_getTopMaster.js
+        this._getTopMaster = function () {
+            // The highest level master
+            var topMaster = this;
+            if (this.master !== null && this.master !== undefined) {
+                topMaster = this.master._getTopMaster();
+            }
+            return topMaster;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_hasCategories.js
         this._hasCategories = function () {
@@ -177,7 +305,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_hasMeasure.js
         this._hasMeasure = function () {
@@ -185,7 +313,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_hasTimeField.js
         this._hasTimeField = function () {
@@ -193,7 +321,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_parseDate.js
         this._parseDate = function (inDate) {
@@ -218,7 +346,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/_update.js
         this._update = function (refactor) {
@@ -228,18 +356,19 @@ window.dimple = dimple;
                 step,
                 remainder,
                 origin,
+                tickCount = this.ticks || 10,
                 getOrderedCategories = function (self, axPos, oppPos) {
                     var category = self.categoryFields[0],
-                        chartData = self.chart._getAllData(),
+                        axisData = self._getAxisData(),
                         sortBy = category,
                         desc = false,
                         isDate = true,
                         currentValue = null,
                         i,
-                        definitions = [];
+                        definitions;
                     // Check whether this field is a date
-                    for (i = 0; i < chartData.length; i += 1) {
-                        currentValue = self._parseDate(chartData[i][category]);
+                    for (i = 0; i < axisData.length; i += 1) {
+                        currentValue = self._parseDate(axisData[i][category]);
                         if (currentValue !== null && currentValue !== undefined && isNaN(currentValue)) {
                             isDate = false;
                             break;
@@ -255,7 +384,7 @@ window.dimple = dimple;
                         }, this);
                     }
                     definitions = self._orderRules.concat({ ordering : sortBy, desc : desc });
-                    return dimple._getOrderedList(chartData, category, definitions);
+                    return dimple._getOrderedList(axisData, category, definitions);
                 };
 
             // If the axis is a percentage type axis the bounds must be between -1 and 1.  Sometimes
@@ -268,11 +397,13 @@ window.dimple = dimple;
             this._max = (this.overrideMax !== null ? this.overrideMax : this._max);
 
             // If this is an x axis
-            if (this.position === "x") {
+            if (this.position === "x" && (this._scale === null || refactor)) {
                 if (this._hasTimeField()) {
                     this._scale = d3.time.scale()
-                        .rangeRound([this.chart._xPixels(), this.chart._xPixels() + this.chart._widthPixels()])
-                        .domain([this._min, this._max]);
+                        // Previously used rangeRound which causes problems with the area chart (Issue #79)
+                        .range([this.chart._xPixels(), this.chart._xPixels() + this.chart._widthPixels()])
+                        .domain([this._min, this._max])
+                        .clamp(this.clamp);
                 } else if (this.useLog) {
                     this._scale = d3.scale.log()
                         .range([this.chart._xPixels(), this.chart._xPixels() + this.chart._widthPixels()])
@@ -280,18 +411,26 @@ window.dimple = dimple;
                             (this._min === 0 ? Math.pow(this.logBase, -1) : this._min),
                             (this._max === 0 ? -1 * Math.pow(this.logBase, -1) : this._max)
                         ])
-                        .clamp(true)
+                        .clamp(this.clamp)
                         .base(this.logBase)
                         .nice();
                 } else if (this.measure === null || this.measure === undefined) {
                     distinctCats = getOrderedCategories(this, "x", "y");
+                    // If there are any slaves process accordingly
+                    if (this._slaves !== null && this._slaves !== undefined) {
+                        this._slaves.forEach(function (slave) {
+                            distinctCats = distinctCats.concat(getOrderedCategories(slave, "x", "y"));
+                        }, this);
+                    }
                     this._scale = d3.scale.ordinal()
                         .rangePoints([this.chart._xPixels(), this.chart._xPixels() + this.chart._widthPixels()])
                         .domain(distinctCats.concat([""]));
                 } else {
                     this._scale = d3.scale.linear()
                         .range([this.chart._xPixels(), this.chart._xPixels() + this.chart._widthPixels()])
-                        .domain([this._min, this._max]).nice();
+                        .domain([this._min, this._max])
+                        .clamp(this.clamp)
+                        .nice();
                 }
                 // If it's visible, orient it at the top or bottom if it's first or second respectively
                 if (!this.hidden) {
@@ -300,21 +439,29 @@ window.dimple = dimple;
                         this._draw = d3.svg.axis()
                             .orient("bottom")
                             .scale(this._scale);
+                        if (this.ticks) {
+                            this._draw.ticks(tickCount);
+                        }
                         break;
                     case 1:
                         this._draw = d3.svg.axis()
                             .orient("top")
                             .scale(this._scale);
+                        if (this.ticks) {
+                            this._draw.ticks(tickCount);
+                        }
                         break;
                     default:
                         break;
                     }
                 }
-            } else if (this.position === "y") {
+            } else if (this.position === "y" && (this._scale === null || refactor)) {
                 if (this._hasTimeField()) {
                     this._scale = d3.time.scale()
-                        .rangeRound([this.chart._yPixels() + this.chart._heightPixels(), this.chart._yPixels()])
-                        .domain([this._min, this._max]);
+                        // Previously used rangeRound which causes problems with the area chart (Issue #79)
+                        .range([this.chart._yPixels() + this.chart._heightPixels(), this.chart._yPixels()])
+                        .domain([this._min, this._max])
+                        .clamp(this.clamp);
                 } else if (this.useLog) {
                     this._scale = d3.scale.log()
                         .range([this.chart._yPixels() + this.chart._heightPixels(), this.chart._yPixels()])
@@ -322,11 +469,17 @@ window.dimple = dimple;
                             (this._min === 0 ? Math.pow(this.logBase, -1) : this._min),
                             (this._max === 0 ? -1 * Math.pow(this.logBase, -1) : this._max)
                         ])
-                        .clamp(true)
+                        .clamp(this.clamp)
                         .base(this.logBase)
                         .nice();
                 } else if (this.measure === null || this.measure === undefined) {
                     distinctCats = getOrderedCategories(this, "y", "x");
+                    // If there are any slaves process accordingly
+                    if (this._slaves !== null && this._slaves !== undefined) {
+                        this._slaves.forEach(function (slave) {
+                            distinctCats = distinctCats.concat(getOrderedCategories(slave, "y", "x"));
+                        }, this);
+                    }
                     this._scale = d3.scale.ordinal()
                         .rangePoints([this.chart._yPixels() + this.chart._heightPixels(), this.chart._yPixels()])
                         .domain(distinctCats.concat([""]));
@@ -334,6 +487,7 @@ window.dimple = dimple;
                     this._scale = d3.scale.linear()
                         .range([this.chart._yPixels() + this.chart._heightPixels(), this.chart._yPixels()])
                         .domain([this._min, this._max])
+                        .clamp(this.clamp)
                         .nice();
                 }
                 // if it's visible, orient it at the left or right if it's first or second respectively
@@ -343,17 +497,23 @@ window.dimple = dimple;
                         this._draw = d3.svg.axis()
                             .orient("left")
                             .scale(this._scale);
+                        if (this.ticks) {
+                            this._draw.ticks(tickCount);
+                        }
                         break;
                     case 1:
                         this._draw = d3.svg.axis()
                             .orient("right")
                             .scale(this._scale);
+                        if (this.ticks) {
+                            this._draw.ticks(tickCount);
+                        }
                         break;
                     default:
                         break;
                     }
                 }
-            } else if (this.position.length > 0 && this.position[0] === "z") {
+            } else if (this.position.length > 0 && this.position[0] === "z" && this._scale === null) {
                 if (this.useLog) {
                     this._scale = d3.scale.log()
                         .range([this.chart._heightPixels() / 300, this.chart._heightPixels() / 10])
@@ -361,23 +521,47 @@ window.dimple = dimple;
                             (this._min === 0 ? Math.pow(this.logBase, -1) : this._min),
                             (this._max === 0 ? -1 * Math.pow(this.logBase, -1) : this._max)
                         ])
-                        .clamp(true)
+                        .clamp(this.clamp)
                         .base(this.logBase);
                 } else {
                     this._scale = d3.scale.linear()
-                        .range([this.chart._heightPixels() / 300, this.chart._heightPixels() / 10])
-                        .domain([this._min, this._max]);
+                        .range([1, this.chart._heightPixels() / 10])
+                        .domain([this._min, this._max])
+                        .clamp(this.clamp);
                 }
-            } else if (this.position.length > 0 && this.position[0] === "c") {
+            } else if (this.position.length > 0 && this.position[0] === "p" && this._scale === null) {
+                if (this.useLog) {
+                    this._scale = d3.scale.log()
+                        .range([0, 360])
+                        .domain([
+                            (this._min === 0 ? Math.pow(this.logBase, -1) : this._min),
+                            (this._max === 0 ? -1 * Math.pow(this.logBase, -1) : this._max)
+                        ])
+                        .clamp(this.clamp)
+                        .base(this.logBase);
+                } else {
+                    this._scale = d3.scale.linear()
+                        .range([0, 360])
+                        .domain([this._min, this._max])
+                        .clamp(this.clamp);
+                }
+            } else if (this.position.length > 0 && this.position[0] === "c" && this._scale === null) {
                 this._scale = d3.scale.linear()
                     .range([0, (this.colors === null || this.colors.length === 1 ? 1 : this.colors.length - 1)])
-                    .domain([this._min, this._max]);
+                    .domain([this._min, this._max])
+                    .clamp(this.clamp);
+            }
+            // Apply this scale to all slaves as well
+            if (this._slaves !== null && this._slaves !== undefined && this._slaves.length > 0) {
+                this._slaves.forEach(function (slave) {
+                    slave._scale = this._scale;
+                }, this);
             }
             // Check that the axis ends on a labelled tick
-            if ((refactor === null || refactor === undefined || refactor === false) && !this._hasTimeField() && this._scale !== null && this._scale.ticks !== null && this._scale.ticks !== undefined && this._scale.ticks(10).length > 0 && (this.position === "x" || this.position === "y")) {
+            if ((refactor === null || refactor === undefined || refactor === false) && !this._hasTimeField() && this._scale !== null && this._scale.ticks !== null && this._scale.ticks !== undefined && this._scale.ticks(tickCount).length > 0 && (this.position === "x" || this.position === "y")) {
 
-                // Get the ticks determined based on a split of 10
-                ticks = this._scale.ticks(10);
+                // Get the ticks determined based on the specified split
+                ticks = this._scale.ticks(tickCount);
                 // Get the step between ticks
                 step = ticks[1] - ticks[0];
                 // Get the remainder
@@ -398,6 +582,10 @@ window.dimple = dimple;
             // one is required.
             if (distinctCats !== null && distinctCats !== undefined && distinctCats.length > 0) {
                 origin = this._scale.copy()(distinctCats[0]);
+            } else if (this._min > 0) {
+                origin = this._scale.copy()(this._min);
+            } else if (this._max < 0) {
+                origin = this._scale.copy()(this._max);
             } else {
                 origin = this._scale.copy()(0);
             }
@@ -412,14 +600,14 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/addGroupOrderRule.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-addGroupOrderRule
         this.addGroupOrderRule = function (ordering, desc) {
             this._groupOrderRules.push({ ordering : ordering, desc : desc });
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/axis/methods/addOrderRule.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-addOrderRule
@@ -430,7 +618,7 @@ window.dimple = dimple;
     // End dimple.axis
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/chart/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart
@@ -462,6 +650,10 @@ window.dimple = dimple;
         this.titleShape = null;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-shapes
         this.shapes = null;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-ease
+        this.ease = "cubic-in-out";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-staggerDraw
+        this.staggerDraw = false;
 
         // The group within which to put all of this chart's objects
         this._group = svg.append("g");
@@ -474,7 +666,7 @@ window.dimple = dimple;
         // The next colour index to use, this value is cycled around for all default colours
         this._nextColor = 0;
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_axisIndex.js
         // Return the ordinal value of the passed axis.  If an orientation is passed, return the order for the 
@@ -500,12 +692,12 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_getAllData.js
         // Mash together all of the datasets
         this._getAllData = function () {
-            // The return array will include all data for chart as well as an series
+            // The return array will include all data for chart as well as any series
             var returnData = [];
             // If there is data at the chart level
             if (this.data !== null && this.data !== undefined && this.data.length > 0) {
@@ -524,358 +716,566 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/chart/methods/_getData.js
+        // Create a dataset containing positioning information for every series
+        this._getData = function (data, cats, agg, order, stacked, x, y, z, p, c) {
+            // The data for this series
+            var returnData = [],
+                // Handle multiple category values by iterating the fields in the row and concatenate the values
+                // This is repeated for each axis using a small anon function
+                getField = function (axis, row) {
+                    var returnField = [];
+                    if (axis !== null) {
+                        if (axis._hasTimeField()) {
+                            returnField.push(axis._parseDate(row[axis.timeField]));
+                        } else if (axis._hasCategories()) {
+                            axis.categoryFields.forEach(function (cat) {
+                                returnField.push(row[cat]);
+                            }, this);
+                        }
+                    }
+                    return returnField;
+                },
+            // Catch a non-numeric value and re-calc as count
+                useCount = { x: false, y: false, z: false, p: false, c: false },
+            // If the elements are grouped a unique list of secondary category values will be required
+                secondaryElements = { x: [], y: [] },
+            // Get the x and y totals for percentages.  This cannot be done in the loop above as we need the data aggregated before we get an abs total.
+            // otherwise it will wrongly account for negatives and positives rolled together.
+                totals = { x: [], y: [], z: [], p: [] },
+                colorBounds = { min: null, max: null },
+                tot,
+                running = { x: [], y: [], z: [], p: [] },
+                addedCats = [],
+                catTotals = {},
+                grandTotals = { x: 0, y: 0, z: 0, p: 0 },
+                key,
+                storyCat = "",
+                orderedStoryboardArray = [],
+                seriesCat = [],
+                orderedSeriesArray = [],
+                xCat = "",
+                xSortArray = [],
+                yCat = "",
+                ySortArray = [],
+                pCat = "",
+                pSortArray = [],
+                rules = [],
+                sortedData = data,
+                groupRules = [];
+
+            if (this.storyboard && this.storyboard.categoryFields.length > 0) {
+                storyCat = this.storyboard.categoryFields[0];
+                orderedStoryboardArray = dimple._getOrderedList(sortedData, storyCat, this.storyboard._orderRules);
+            }
+
+            // Deal with mekkos
+            if (x && x._hasCategories() && x._hasMeasure()) {
+                xCat = x.categoryFields[0];
+                xSortArray = dimple._getOrderedList(sortedData, xCat, x._orderRules.concat([{ ordering : x.measure, desc : true }]));
+            }
+            if (y && y._hasCategories() && y._hasMeasure()) {
+                yCat = y.categoryFields[0];
+                ySortArray = dimple._getOrderedList(sortedData, yCat, y._orderRules.concat([{ ordering : y.measure, desc : true }]));
+            }
+            if (p && p._hasCategories() && p._hasMeasure()) {
+                pCat = p.categoryFields[0];
+                pSortArray = dimple._getOrderedList(sortedData, pCat, p._orderRules.concat([{ ordering : p.measure, desc : true }]));
+            }
+
+            if (sortedData.length > 0 && cats && cats.length > 0) {
+                // Concat is used here to break the reference to the parent array, if we don't do this, in a storyboarded chart,
+                // the series rules to grow and grow until the system grinds to a halt trying to deal with them all.
+                rules = [].concat(order);
+                seriesCat = [];
+                cats.forEach(function (cat) {
+                    if (sortedData[0][cat] !== undefined) {
+                        seriesCat.push(cat);
+                    }
+                }, this);
+                if (p && p._hasMeasure()) {
+                    rules.push({ ordering : p.measure, desc : true });
+                } else if (c && c._hasMeasure()) {
+                    rules.push({ ordering : c.measure, desc : true });
+                } else if (z && z._hasMeasure()) {
+                    rules.push({ ordering : z.measure, desc : true });
+                } else if (x && x._hasMeasure()) {
+                    rules.push({ ordering : x.measure, desc : true });
+                } else if (y && y._hasMeasure()) {
+                    rules.push({ ordering : y.measure, desc : true });
+                }
+                orderedSeriesArray = dimple._getOrderedList(sortedData, seriesCat, rules);
+            }
+
+            sortedData.sort(function (a, b) {
+                var returnValue = 0,
+                    categories,
+                    comp,
+                    p,
+                    q,
+                    aMatch,
+                    bMatch;
+                if (storyCat !== "") {
+                    returnValue = orderedStoryboardArray.indexOf(a[storyCat]) - orderedStoryboardArray.indexOf(b[storyCat]);
+                }
+                if (xCat !== "" && returnValue === 0) {
+                    returnValue = xSortArray.indexOf(a[xCat]) - xSortArray.indexOf(b[xCat]);
+                }
+                if (yCat !== "" && returnValue === 0) {
+                    returnValue = ySortArray.indexOf(a[yCat]) - ySortArray.indexOf(b[yCat]);
+                }
+                if (pCat !== "" && returnValue === 0) {
+                    returnValue = pSortArray.indexOf(a[pCat]) - ySortArray.indexOf(b[pCat]);
+                }
+                if (seriesCat && seriesCat.length > 0 && returnValue === 0) {
+                    categories = [].concat(seriesCat);
+                    returnValue = 0;
+                    for (p = 0; p < orderedSeriesArray.length; p += 1) {
+                        comp = [].concat(orderedSeriesArray[p]);
+                        aMatch = true;
+                        bMatch = true;
+                        for (q = 0; q < categories.length; q += 1) {
+                            aMatch = aMatch && (a[categories[q]] === comp[q]);
+                            bMatch = bMatch && (b[categories[q]] === comp[q]);
+                        }
+                        if (aMatch && bMatch) {
+                            returnValue = 0;
+                            break;
+                        } else if (aMatch) {
+                            returnValue = -1;
+                            break;
+                        } else if (bMatch) {
+                            returnValue = 1;
+                            break;
+                        }
+                    }
+                }
+                return returnValue;
+            });
+
+            // Iterate every row in the data to calculate the return values
+            sortedData.forEach(function (d) {
+                // Reset the index
+                var foundIndex = -1,
+                    xField = getField(x, d),
+                    yField = getField(y, d),
+                    zField = getField(z, d),
+                    pField = getField(p, d),
+                // Get the aggregate field using the other fields if necessary
+                    aggField = [],
+                    key,
+                    k,
+                    i,
+                    newRow,
+                    updateData;
+
+                if (!cats || cats.length === 0) {
+                    aggField = ["All"];
+                } else {
+                    // Iterate the category fields
+                    for (i = 0; i < cats.length; i += 1) {
+                        // Either add the value of the field or the name itself.  This allows users to add custom values, for example
+                        // Setting a particular color for a set of values can be done by using a non-existent final value and then coloring
+                        // by it
+                        if (d[cats[i]] === undefined) {
+                            aggField.push(cats[i]);
+                        } else {
+                            aggField.push(d[cats[i]]);
+                        }
+                    }
+                }
+
+                // Add a key
+                key = aggField.join("/") + "_" + xField.join("/") + "_" + yField.join("/") + "_" + pField.join("/") + "_" + zField.join("/");
+                // See if this field has already been added.
+                for (k = 0; k < returnData.length; k += 1) {
+                    if (returnData[k].key === key) {
+                        foundIndex = k;
+                        break;
+                    }
+                }
+                // If the field was not added, do so here
+                if (foundIndex === -1) {
+                    newRow = {
+                        key: key,
+                        aggField: aggField,
+                        xField: xField,
+                        xValue: null,
+                        xCount: 0,
+                        yField: yField,
+                        yValue: null,
+                        yCount: 0,
+                        pField: pField,
+                        pValue: null,
+                        pCount: 0,
+                        zField: zField,
+                        zValue: null,
+                        zCount: 0,
+                        cValue: 0,
+                        cCount: 0,
+                        x: 0,
+                        y: 0,
+                        xOffset: 0,
+                        yOffset: 0,
+                        width: 0,
+                        height: 0,
+                        cx: 0,
+                        cy: 0,
+                        xBound: 0,
+                        yBound: 0,
+                        xValueList: [],
+                        yValueList: [],
+                        zValueList: [],
+                        pValueList: [],
+                        cValueList: [],
+                        fill: {},
+                        stroke: {}
+                    };
+                    returnData.push(newRow);
+                    foundIndex = returnData.length - 1;
+                }
+
+                // Update the return data for the passed axis
+                updateData = function (axis, storyboard) {
+                    var passStoryCheck = true,
+                        lhs = { value: 0, count: 1 },
+                        rhs = { value: 0, count: 1 },
+                        selectStoryValue,
+                        compare = "",
+                        retRow;
+                    if (storyboard !== null) {
+                        selectStoryValue = storyboard.getFrameValue();
+                        storyboard.categoryFields.forEach(function (cat, m) {
+                            if (m > 0) {
+                                compare += "/";
+                            }
+                            compare += d[cat];
+                            passStoryCheck = (compare === selectStoryValue);
+                        }, this);
+                    }
+                    if (axis !== null && axis !== undefined) {
+                        if (passStoryCheck) {
+                            retRow = returnData[foundIndex];
+                            if (axis._hasMeasure() && d[axis.measure] !== null && d[axis.measure] !== undefined) {
+                                // Keep a distinct list of values to calculate a distinct count in the case of a non-numeric value being found
+                                if (retRow[axis.position + "ValueList"].indexOf(d[axis.measure]) === -1) {
+                                    retRow[axis.position + "ValueList"].push(d[axis.measure]);
+                                }
+                                // The code above is outside this check for non-numeric values because we might encounter one far down the list, and
+                                // want to have a record of all values so far.
+                                if (isNaN(parseFloat(d[axis.measure]))) {
+                                    useCount[axis.position] = true;
+                                }
+                                // Set the value using the aggregate function method
+                                lhs.value = retRow[axis.position + "Value"];
+                                lhs.count = retRow[axis.position + "Count"];
+                                rhs.value = d[axis.measure];
+                                retRow[axis.position + "Value"] = agg(lhs, rhs);
+                                retRow[axis.position + "Count"] += 1;
+                            }
+                        }
+                    }
+                };
+                // Update all the axes
+                updateData(x, this.storyboard);
+                updateData(y, this.storyboard);
+                updateData(z, this.storyboard);
+                updateData(p, this.storyboard);
+                updateData(c, this.storyboard);
+            }, this);
+            // Get secondary elements if necessary
+            if (x && x._hasCategories() && x.categoryFields.length > 1 && secondaryElements.x !== undefined) {
+                groupRules = [];
+                if (y._hasMeasure()) {
+                    groupRules.push({ ordering : y.measure, desc : true });
+                }
+                secondaryElements.x = dimple._getOrderedList(sortedData, x.categoryFields[1], x._groupOrderRules.concat(groupRules));
+            }
+            if (y && y._hasCategories() && y.categoryFields.length > 1 && secondaryElements.y !== undefined) {
+                groupRules = [];
+                if (x._hasMeasure()) {
+                    groupRules.push({ ordering : x.measure, desc : true });
+                }
+                secondaryElements.y = dimple._getOrderedList(sortedData, y.categoryFields[1], y._groupOrderRules.concat(groupRules));
+                secondaryElements.y.reverse();
+            }
+            returnData.forEach(function (ret) {
+                if (x !== null) {
+                    if (useCount.x === true) { ret.xValue = ret.xValueList.length; }
+                    tot = (totals.x[ret.xField.join("/")] || 0) + (y._hasMeasure() ? Math.abs(ret.yValue) : 0);
+                    totals.x[ret.xField.join("/")] = tot;
+                }
+                if (y !== null) {
+                    if (useCount.y === true) { ret.yValue = ret.yValueList.length; }
+                    tot = (totals.y[ret.yField.join("/")] || 0) + (x._hasMeasure() ? Math.abs(ret.xValue) : 0);
+                    totals.y[ret.yField.join("/")] = tot;
+                }
+                if (p !== null) {
+                    if (useCount.p === true) { ret.pValue = ret.pValueList.length; }
+                    tot = (totals.p[ret.pField.join("/")] || 0) + (p._hasMeasure() ? Math.abs(ret.pValue) : 0);
+                    totals.p[ret.pField.join("/")] = tot;
+                }
+                if (z !== null) {
+                    if (useCount.z === true) { ret.zValue = ret.zValueList.length; }
+                    tot = (totals.z[ret.zField.join("/")] || 0) + (z._hasMeasure() ? Math.abs(ret.zValue) : 0);
+                    totals.z[ret.zField.join("/")] = tot;
+                }
+                if (c !== null) {
+                    if (colorBounds.min === null || ret.cValue < colorBounds.min) { colorBounds.min = ret.cValue; }
+                    if (colorBounds.max === null || ret.cValue > colorBounds.max) { colorBounds.max = ret.cValue; }
+                }
+            }, this);
+            // Before calculating the positions we need to sort elements
+
+            // Set all the dimension properties of the data
+            for (key in totals.x) { if (totals.x.hasOwnProperty(key)) { grandTotals.x += totals.x[key]; } }
+            for (key in totals.y) { if (totals.y.hasOwnProperty(key)) { grandTotals.y += totals.y[key]; } }
+            for (key in totals.p) { if (totals.p.hasOwnProperty(key)) { grandTotals.p += totals.p[key]; } }
+            for (key in totals.z) { if (totals.z.hasOwnProperty(key)) { grandTotals.z += totals.z[key]; } }
+
+            returnData.forEach(function (ret) {
+                var baseColor,
+                    targetColor,
+                    scale,
+                    colorVal,
+                    floatingPortion,
+                    getAxisData = function (axis, opp, size) {
+                        var totalField,
+                            value,
+                            selectValue,
+                            pos,
+                            cumValue;
+                        if (axis !== null && axis !== undefined) {
+                            pos = axis.position;
+                            if (!axis._hasCategories()) {
+                                value = (axis.showPercent ? ret[pos + "Value"] / totals[opp][ret[opp + "Field"].join("/")] : ret[pos + "Value"]);
+                                totalField = ret[opp + "Field"].join("/") + (ret[pos + "Value"] >= 0);
+                                cumValue = running[pos][totalField] = ((running[pos][totalField] === null || running[pos][totalField] === undefined || pos === "z" || pos === "p") ? 0 : running[pos][totalField]) + value;
+                                selectValue = ret[pos + "Bound"] = ret["c" + pos] = (((pos === "x" || pos === "y") && stacked) ? cumValue : value);
+                                ret[size] = value;
+                                ret[pos] = selectValue - (((pos === "x" && value >= 0) || (pos === "y" && value <= 0)) ? value : 0);
+                            } else {
+                                if (axis._hasMeasure()) {
+                                    totalField = ret[axis.position + "Field"].join("/");
+                                    value = (axis.showPercent ? totals[axis.position][totalField] / grandTotals[axis.position] : totals[axis.position][totalField]);
+                                    if (addedCats.indexOf(totalField) === -1) {
+                                        catTotals[totalField] = value + (addedCats.length > 0 ? catTotals[addedCats[addedCats.length - 1]] : 0);
+                                        addedCats.push(totalField);
+                                    }
+                                    selectValue = ret[pos + "Bound"] = ret["c" + pos] = (((pos === "x" || pos === "y") && stacked) ? catTotals[totalField] : value);
+                                    ret[size] = value;
+                                    ret[pos] = selectValue - (((pos === "x" && value >= 0) || (pos === "y" && value <= 0)) ? value : 0);
+                                } else {
+                                    ret[pos] = ret["c" + pos] = ret[pos + "Field"][0];
+                                    ret[size] = 1;
+                                    if (secondaryElements[pos] !== undefined && secondaryElements[pos] !== null && secondaryElements[pos].length >= 2) {
+                                        ret[pos + "Offset"] = secondaryElements[pos].indexOf(ret[pos + "Field"][1]);
+                                        ret[size] = 1 / secondaryElements[pos].length;
+                                    }
+                                }
+                            }
+                        }
+                    };
+                getAxisData(x, "y", "width");
+                getAxisData(y, "x", "height");
+                getAxisData(z, "z", "r");
+                getAxisData(p, "p", "angle");
+
+                // If there is a color axis
+                if (c !== null && colorBounds.min !== null && colorBounds.max !== null) {
+                    // Handle matching min and max
+                    if (colorBounds.min === colorBounds.max) {
+                        colorBounds.min -= 0.5;
+                        colorBounds.max += 0.5;
+                    }
+                    // Limit the bounds of the color value to be within the range.  Users may override the axis bounds and this
+                    // allows a 2 color scale rather than blending if the min and max are set to 0 and 0.01 for example negative values
+                    // and zero value would be 1 color and positive another.
+                    colorBounds.min = (c.overrideMin || colorBounds.min);
+                    colorBounds.max = (c.overrideMax || colorBounds.max);
+                    ret.cValue = (ret.cValue > colorBounds.max ? colorBounds.max : (ret.cValue < colorBounds.min ? colorBounds.min : ret.cValue));
+                    // Calculate the factors for the calculations
+                    scale = d3.scale.linear().range([0, (c.colors === null || c.colors.length === 1 ? 1 : c.colors.length - 1)]).domain([colorBounds.min, colorBounds.max]);
+                    colorVal = scale(ret.cValue);
+                    floatingPortion = colorVal - Math.floor(colorVal);
+                    if (ret.cValue === colorBounds.max) {
+                        floatingPortion = 1;
+                    }
+                    // If there is a single color defined
+                    if (c.colors && c.colors.length === 1) {
+                        baseColor = d3.rgb(c.colors[0]);
+                        targetColor = d3.rgb(this.getColor(ret.aggField.slice(-1)[0]).fill);
+                    } else if (c.colors && c.colors.length > 1) {
+                        baseColor = d3.rgb(c.colors[Math.floor(colorVal)]);
+                        targetColor = d3.rgb(c.colors[Math.ceil(colorVal)]);
+                    } else {
+                        baseColor = d3.rgb("white");
+                        targetColor = d3.rgb(this.getColor(ret.aggField.slice(-1)[0]).fill);
+                    }
+                    // Calculate the correct grade of color
+                    baseColor.r = Math.floor(baseColor.r + (targetColor.r - baseColor.r) * floatingPortion);
+                    baseColor.g = Math.floor(baseColor.g + (targetColor.g - baseColor.g) * floatingPortion);
+                    baseColor.b = Math.floor(baseColor.b + (targetColor.b - baseColor.b) * floatingPortion);
+                    // Set the colors on the row
+                    ret.fill = baseColor.toString();
+                    ret.stroke = baseColor.darker(0.5).toString();
+                }
+
+            }, this);
+
+            return returnData;
+
+        };
+
+
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/chart/methods/_getDelay.js
+        this._getDelay = function (duration, chart, series) {
+            return function (d) {
+                var returnValue = 0;
+                if (series && chart.staggerDraw) {
+                    if (series.x._hasCategories()) {
+                        returnValue = (dimple._helpers.cx(d, chart, series) / chart._widthPixels()) * duration;
+                    } else if (series.y._hasCategories()) {
+                        returnValue = (1 - dimple._helpers.cy(d, chart, series) / chart._heightPixels()) * duration;
+                    }
+                }
+                return returnValue;
+            };
+        };
+
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_getSeriesData.js
         // Create a dataset containing positioning information for every series
         this._getSeriesData = function () {
+
             // If there are series
             if (this.series !== null && this.series !== undefined) {
+
                 // Iterate all the series
                 this.series.forEach(function (series) {
+
                     // The data for this series
-                    var returnData = [],
-                        // Handle multiple category values by iterating the fields in the row and concatonate the values
-                        // This is repeated for each axis using a small anon function
-                        getField = function (axis, row) {
-                            var returnField = [];
-                            if (axis !== null) {
-                                if (axis._hasTimeField()) {
-                                    returnField.push(axis._parseDate(row[axis.timeField]));
-                                } else if (axis._hasCategories()) {
-                                    axis.categoryFields.forEach(function (cat) {
-                                        returnField.push(row[cat]);
-                                    }, this);
+                    var data = series.data || this.data || [],
+                        cats = [].concat(series.categoryFields || "All"),
+                        returnData = this._getData(data, cats, series.aggregate, series._orderRules, series._isStacked(), series.x, series.y, series.z, series.p, series.c),
+                        higherLevelData = [],
+                        i,
+                        j,
+                        aCats,
+                        aCatString,
+                        bCats,
+                        bCatString,
+                        pieDictionary = {},
+                        startAngle = (series.startAngle * (Math.PI / 180) || 0),
+                        endAngle = (series.endAngle || 360) * (Math.PI / 180);
+
+                    // If the startAngle is after the endAngle (e.g. 270deg -> 90deg becomes -90deg -> 90deg.
+                    if (startAngle > endAngle) {
+                        startAngle -= 2 * Math.PI;
+                    }
+
+                    // If there is a pie axis we need to run a second dataset because the x and y will be
+                    // at a higher level of aggregation than the rows, we want all the segments for a pie chart to
+                    // have the same x and y values
+                    if (series.p && cats.length > 0) {
+                        if (series.x && series.y) {
+                            cats.pop();
+                            higherLevelData = this._getData(data, ["__dimple_placeholder__"].concat(cats), series.aggregate, series._orderRules, series._isStacked(), series.x, series.y, series.z, series.p, series.c);
+                            for (i = 0; i < returnData.length; i += 1) {
+                                aCats = ["__dimple_placeholder__"].concat(returnData[i].aggField);
+                                aCats.pop();
+                                if (series.x && series.x._hasCategories()) {
+                                    aCats = aCats.concat(returnData[i].xField);
+                                }
+                                if (series.y && series.y._hasCategories()) {
+                                    aCats = aCats.concat(returnData[i].yField);
+                                }
+                                aCatString = aCats.join("|");
+                                for (j = 0; j < higherLevelData.length; j += 1) {
+                                    bCats = [].concat(higherLevelData[j].aggField);
+                                    if (series.x && series.x._hasCategories()) {
+                                        bCats = bCats.concat(higherLevelData[j].xField);
+                                    }
+                                    if (series.y && series.y._hasCategories()) {
+                                        bCats = bCats.concat(higherLevelData[j].yField);
+                                    }
+                                    bCatString = bCats.join("|");
+                                    if (aCatString === bCatString) {
+                                        returnData[i].xField = higherLevelData[j].xField;
+                                        returnData[i].xValue = higherLevelData[j].xValue;
+                                        returnData[i].xCount = higherLevelData[j].xCount;
+                                        returnData[i].yField = higherLevelData[j].yField;
+                                        returnData[i].yValue = higherLevelData[j].yValue;
+                                        returnData[i].yCount = higherLevelData[j].yCount;
+                                        returnData[i].zField = higherLevelData[j].zField;
+                                        returnData[i].zValue = higherLevelData[j].zValue;
+                                        returnData[i].zCount = higherLevelData[j].zCount;
+                                        returnData[i].x = higherLevelData[j].x;
+                                        returnData[i].y = higherLevelData[j].y;
+                                        returnData[i].r = higherLevelData[j].r;
+                                        returnData[i].xOffset = higherLevelData[j].xOffset;
+                                        returnData[i].yOffset = higherLevelData[j].yOffset;
+                                        returnData[i].width = higherLevelData[j].width;
+                                        returnData[i].height = higherLevelData[j].height;
+                                        returnData[i].cx = higherLevelData[j].cx;
+                                        returnData[i].cy = higherLevelData[j].cy;
+                                        returnData[i].xBound = higherLevelData[j].xBound;
+                                        returnData[i].yBound = higherLevelData[j].yBound;
+                                        returnData[i].xValueList = higherLevelData[j].xValueList;
+                                        returnData[i].yValueList = higherLevelData[j].yValueList;
+                                        returnData[i].zValueList = higherLevelData[j].zValueList;
+                                        returnData[i].cValueList = higherLevelData[j].cValueList;
+
+                                        // Add some specific pie properties
+                                        returnData[i].pieKey = higherLevelData[j].key;
+                                        returnData[i].value = returnData.pValue;
+
+                                        // Annoyingly we can't use the higher aggregate value here because if the series is averaged
+                                        // rather than summed it breaks the logic
+                                        if (!pieDictionary[higherLevelData[j].key]) {
+                                            pieDictionary[higherLevelData[j].key] = {
+                                                total: 0,
+                                                angle: startAngle
+                                            };
+                                        }
+                                        pieDictionary[higherLevelData[j].key].total += returnData[i].pValue;
+
+                                        break;
+                                    }
                                 }
                             }
-                            return returnField;
-                        },
-                        // Catch a non-numeric value and re-calc as count
-                        useCount = { x: false, y: false, z: false, c: false },
-                        // If the elements are grouped a unique list of secondary category values will be required
-                        secondaryElements = { x: [], y: [] },
-                        // Get the x and y totals for percentages.  This cannot be done in the loop above as we need the data aggregated before we get an abs total.
-                        // otherwise it will wrongly account for negatives and positives rolled together.
-                        totals = { x: [], y: [], z: [] },
-                        colorBounds = { min: null, max: null },
-                        tot,
-                        running = { x: [], y: [], z: [] },
-                        addedCats = [],
-                        catTotals = {},
-                        grandTotals = { x: 0, y: 0, z: 0 },
-                        key,
-                        storyCat = "",
-                        orderedStoryboardArray = [],
-                        seriesCat = "",
-                        orderedSeriesArray = [],
-                        xCat = "",
-                        xSortArray = [],
-                        yCat = "",
-                        ySortArray = [],
-                        rules = [],
-                        sortedData = series.data || this.data,
-                        groupRules = [];
-
-                    if (this.storyboard !== null && this.storyboard !== undefined && this.storyboard.categoryFields.length > 0) {
-                        storyCat = this.storyboard.categoryFields[0];
-                        orderedStoryboardArray = dimple._getOrderedList(sortedData, storyCat, this.storyboard._orderRules);
-                    }
-
-                    // Deal with mekkos
-                    if (series.x._hasCategories() && series.x._hasMeasure()) {
-                        xCat = series.x.categoryFields[0];
-                        xSortArray = dimple._getOrderedList(sortedData, xCat, series.x._orderRules.concat([{ ordering : series.x.measure, desc : true }]));
-                    }
-                    if (series.y._hasCategories() && series.y._hasMeasure()) {
-                        yCat = series.y.categoryFields[0];
-                        ySortArray = dimple._getOrderedList(sortedData, yCat, series.y._orderRules.concat([{ ordering : series.y.measure, desc : true }]));
-                    }
-
-                    if (series.categoryFields !== null && series.categoryFields !== undefined && series.categoryFields.length > 0) {
-                        // Concat is used here to break the reference to the parent array, if we don't do this, in a storyboarded chart,
-                        // the series rules to grow and grow until the system grinds to a halt trying to deal with them all.
-                        rules = [].concat(series._orderRules);
-                        seriesCat = series.categoryFields[0];
-                        if (series.c !== null && series.c !== undefined && series.c._hasMeasure()) {
-                            rules.push({ ordering : series.c.measure, desc : true });
-                        } else if (series.z !== null && series.z !== undefined && series.z._hasMeasure()) {
-                            rules.push({ ordering : series.z.measure, desc : true });
-                        } else if (series.x._hasMeasure()) {
-                            rules.push({ ordering : series.x.measure, desc : true });
-                        } else if (series.y._hasMeasure()) {
-                            rules.push({ ordering : series.y.measure, desc : true });
-                        }
-                        orderedSeriesArray = dimple._getOrderedList(sortedData, seriesCat, rules);
-                    }
-
-                    sortedData.sort(function (a, b) {
-                        var returnValue = 0;
-                        if (storyCat !== "") {
-                            returnValue = orderedStoryboardArray.indexOf(a[storyCat]) - orderedStoryboardArray.indexOf(b[storyCat]);
-                        }
-                        if (xCat !== "" && returnValue === 0) {
-                            returnValue = xSortArray.indexOf(a[xCat]) - xSortArray.indexOf(b[xCat]);
-                        }
-                        if (yCat !== "" && returnValue === 0) {
-                            returnValue = ySortArray.indexOf(a[yCat]) - ySortArray.indexOf(b[yCat]);
-                        }
-                        if (seriesCat !== "" && returnValue === 0) {
-                            returnValue = orderedSeriesArray.indexOf(a[seriesCat]) - orderedSeriesArray.indexOf(b[seriesCat]);
-                        }
-                        return returnValue;
-                    });
-
-                    // Iterate every row in the data to calculate the return values
-                    sortedData.forEach(function (d) {
-                        // Reset the index
-                        var foundIndex = -1,
-                            xField = getField(series.x, d),
-                            yField = getField(series.y, d),
-                            zField = getField(series.z, d),
-                            // Get the aggregate field using the other fields if necessary
-                            aggField = [],
-                            key,
-                            k,
-                            newRow,
-                            updateData;
-                        if (series.categoryFields === null || series.categoryFields === undefined || series.categoryFields.length === 0) {
-                            aggField = ["All"];
-                        } else if (series.categoryFields.length === 1 && d[series.categoryFields[0]] === undefined) {
-                            aggField = [series.categoryFields[0]];
                         } else {
-                            series.categoryFields.forEach(function (cat) {
-                                aggField.push(d[cat]);
-                            }, this);
-                        }
-                        // Add a key
-                        key = aggField.join("/") + "_" + xField.join("/") + "_" + yField.join("/") + "_" + zField.join("/");
-                        // See if this field has already been added. 
-                        for (k = 0; k < returnData.length; k += 1) {
-                            if (returnData[k].key === key) {
-                                foundIndex = k;
-                                break;
-                            }
-                        }
-                        // If the field was not added, do so here
-                        if (foundIndex === -1) {
-                            newRow = {
-                                key: key,
-                                aggField: aggField,
-                                xField: xField,
-                                xValue: null,
-                                xCount: 0,
-                                yField: yField,
-                                yValue: null,
-                                yCount: 0,
-                                zField: zField,
-                                zValue: null,
-                                zCount: 0,
-                                cValue: 0,
-                                cCount: 0,
-                                x: 0,
-                                y: 0,
-                                xOffset: 0,
-                                yOffset: 0,
-                                width: 0,
-                                height: 0,
-                                cx: 0,
-                                cy: 0,
-                                xBound: 0,
-                                yBound: 0,
-                                xValueList: [],
-                                yValueList: [],
-                                zValueList: [],
-                                cValueList: [],
-                                fill: {},
-                                stroke: {}
-                            };
-                            returnData.push(newRow);
-                            foundIndex = returnData.length - 1;
-                        }
+                            for (i = 0; i < returnData.length; i += 1) {
+                                // Add some specific pie properties
+                                returnData[i].pieKey = "All";
+                                returnData[i].value = returnData.pValue;
 
-                        // Update the return data for the passed axis
-                        updateData = function (axis, storyboard) {
-                            var passStoryCheck = true,
-                                lhs = { value: 0, count: 1 },
-                                rhs = { value: 0, count: 1 },
-                                selectStoryValue,
-                                compare = "",
-                                retRow;
-                            if (storyboard !== null) {
-                                selectStoryValue = storyboard.getFrameValue();
-                                storyboard.categoryFields.forEach(function (cat, m) {
-                                    if (m > 0) {
-                                        compare += "/";
-                                    }
-                                    compare += d[cat];
-                                    passStoryCheck = (compare === selectStoryValue);
-                                }, this);
-                            }
-                            if (axis !== null && axis !== undefined) {
-                                if (passStoryCheck) {
-                                    retRow = returnData[foundIndex];
-                                    if (axis._hasMeasure()) {
-                                        // Treat undefined values as zero
-                                        if (d[axis.measure] === undefined) {
-                                            d[axis.measure] = 0;
-                                        }
-                                        // Keep a distinct list of values to calculate a distinct count in the case of a non-numeric value being found
-                                        if (retRow[axis.position + "ValueList"].indexOf(d[axis.measure]) === -1) {
-                                            retRow[axis.position + "ValueList"].push(d[axis.measure]);
-                                        }
-                                        // The code above is outside this check for non-numeric values because we might encounter one far down the list, and
-                                        // want to have a record of all values so far.
-                                        if (isNaN(parseFloat(d[axis.measure]))) {
-                                            useCount[axis.position] = true;
-                                        }
-                                        // Set the value using the aggregate function method
-                                        lhs.value = retRow[axis.position + "Value"];
-                                        lhs.count = retRow[axis.position + "Count"];
-                                        rhs.value = d[axis.measure];
-                                        retRow[axis.position + "Value"] = series.aggregate(lhs, rhs);
-                                        retRow[axis.position + "Count"] += 1;
-                                    }
+                                // Annoyingly we can't use the higher aggregate value here because if the series is averaged
+                                // rather than summed it breaks the logic
+                                if (!pieDictionary[returnData[i].pieKey]) {
+                                    pieDictionary[returnData[i].pieKey] = {
+                                        total: 0,
+                                        angle: startAngle
+                                    };
                                 }
+                                pieDictionary[returnData[i].pieKey].total += returnData[i].pValue;
                             }
-                        };
-                        // Update all the axes
-                        updateData(series.x, this.storyboard);
-                        updateData(series.y, this.storyboard);
-                        updateData(series.z, this.storyboard);
-                        updateData(series.c, this.storyboard);
-                    }, this);
-                    // Get secondary elements if necessary
-                    if (series.x !== null && series.x !== undefined && series.x._hasCategories() && series.x.categoryFields.length > 1 && secondaryElements.x !== undefined) {
-                        groupRules = [];
-                        if (series.y._hasMeasure()) {
-                            groupRules.push({ ordering : series.y.measure, desc : true });
                         }
-                        secondaryElements.x = dimple._getOrderedList(sortedData, series.x.categoryFields[1], series.x._groupOrderRules.concat(groupRules));
+
+                        // Loop again to calculate shares
+                        for (i = 0; i < returnData.length; i += 1) {
+                            returnData[i].piePct = (returnData[i].pValue / pieDictionary[returnData[i].pieKey].total);
+                            returnData[i].startAngle = pieDictionary[returnData[i].pieKey].angle;
+                            returnData[i].endAngle = returnData[i].startAngle + returnData[i].piePct * (endAngle - startAngle);
+                            pieDictionary[returnData[i].pieKey].angle = returnData[i].endAngle;
+                        }
                     }
-                    if (series.y !== null && series.y !== undefined && series.y._hasCategories() && series.y.categoryFields.length > 1 && secondaryElements.y !== undefined) {
-                        groupRules = [];
-                        if (series.x._hasMeasure()) {
-                            groupRules.push({ ordering : series.x.measure, desc : true });
-                        }
-                        secondaryElements.y = dimple._getOrderedList(sortedData, series.y.categoryFields[1], series.y._groupOrderRules.concat(groupRules));
-                        secondaryElements.y.reverse();
-                    }
-                    returnData.forEach(function (ret) {
-                        if (series.x !== null) {
-                            if (useCount.x === true) { ret.xValue = ret.xValueList.length; }
-                            tot = (totals.x[ret.xField.join("/")] === null || totals.x[ret.xField.join("/")] === undefined ? 0 : totals.x[ret.xField.join("/")]) + (series.y._hasMeasure() ? Math.abs(ret.yValue) : 0);
-                            totals.x[ret.xField.join("/")] = tot;
-                        }
-                        if (series.y !== null) {
-                            if (useCount.y === true) { ret.yValue = ret.yValueList.length; }
-                            tot = (totals.y[ret.yField.join("/")] === null || totals.y[ret.yField.join("/")] === undefined ? 0 : totals.y[ret.yField.join("/")]) + (series.x._hasMeasure() ? Math.abs(ret.xValue) : 0);
-                            totals.y[ret.yField.join("/")] = tot;
-                        }
-                        if (series.z !== null) {
-                            if (useCount.z === true) { ret.zValue = ret.zValueList.length; }
-                            tot = (totals.z[ret.zField.join("/")] === null || totals.z[ret.zField.join("/")] === undefined ? 0 : totals.z[ret.zField.join("/")]) + (series.z._hasMeasure() ? Math.abs(ret.zValue) : 0);
-                            totals.z[ret.zField.join("/")] = tot;
-                        }
-                        if (series.c !== null) {
-                            if (colorBounds.min === null || ret.cValue < colorBounds.min) { colorBounds.min = ret.cValue; }
-                            if (colorBounds.max === null || ret.cValue > colorBounds.max) { colorBounds.max = ret.cValue; }
-                        }
-                    }, this);
-                    // Before calculating the positions we need to sort elements
-
-                    // Set all the dimension properties of the data
-                    for (key in totals.x) { if (totals.x.hasOwnProperty(key)) { grandTotals.x += totals.x[key]; } }
-                    for (key in totals.y) { if (totals.y.hasOwnProperty(key)) { grandTotals.y += totals.y[key]; } }
-                    for (key in totals.z) { if (totals.z.hasOwnProperty(key)) { grandTotals.z += totals.z[key]; } }
-
-                    returnData.forEach(function (ret) {
-                        var baseColor,
-                            targetColor,
-                            scale,
-                            colorVal,
-                            floatingPortion,
-                            getAxisData = function (axis, opp, size) {
-                                var totalField,
-                                    value,
-                                    selectValue,
-                                    pos,
-                                    cumValue;
-                                if (axis !== null && axis !== undefined) {
-                                    pos = axis.position;
-                                    if (!axis._hasCategories()) {
-                                        value = (axis.showPercent ? ret[pos + "Value"] / totals[opp][ret[opp + "Field"].join("/")] : ret[pos + "Value"]);
-                                        totalField = ret[opp + "Field"].join("/") + (ret[pos + "Value"] >= 0);
-                                        cumValue = running[pos][totalField] = ((running[pos][totalField] === null || running[pos][totalField] === undefined || pos === "z") ? 0 : running[pos][totalField]) + value;
-                                        selectValue = ret[pos + "Bound"] = ret["c" + pos] = (((pos === "x" || pos === "y") && series.stacked) ? cumValue : value);
-                                        ret[size] = value;
-                                        ret[pos] = selectValue - (((pos === "x" && value >= 0) || (pos === "y" && value <= 0)) ? value : 0);
-                                    } else {
-                                        if (axis._hasMeasure()) {
-                                            totalField = ret[axis.position + "Field"].join("/");
-                                            value = (axis.showPercent ? totals[axis.position][totalField] / grandTotals[axis.position] : totals[axis.position][totalField]);
-                                            if (addedCats.indexOf(totalField) === -1) {
-                                                catTotals[totalField] = value + (addedCats.length > 0 ? catTotals[addedCats[addedCats.length - 1]] : 0);
-                                                addedCats.push(totalField);
-                                            }
-                                            selectValue = ret[pos + "Bound"] = ret["c" + pos] = (((pos === "x" || pos === "y") && series.stacked) ? catTotals[totalField] : value);
-                                            ret[size] = value;
-                                            ret[pos] = selectValue - (((pos === "x" && value >= 0) || (pos === "y" && value <= 0)) ? value : 0);
-                                        } else {
-                                            ret[pos] = ret["c" + pos] = ret[pos + "Field"][0];
-                                            ret[size] = 1;
-                                            if (secondaryElements[pos] !== undefined && secondaryElements[pos] !== null && secondaryElements[pos].length >= 2) {
-                                                ret[pos + "Offset"] = secondaryElements[pos].indexOf(ret[pos + "Field"][1]);
-                                                ret[size] = 1 / secondaryElements[pos].length;
-                                            }
-                                        }
-                                    }
-                                }
-                            };
-                        getAxisData(series.x, "y", "width");
-                        getAxisData(series.y, "x", "height");
-                        getAxisData(series.z, "z", "r");
-
-                        // If there is a color axis
-                        if (series.c !== null && colorBounds.min !== null && colorBounds.max !== null) {
-                            // Handle matching min and max
-                            if (colorBounds.min === colorBounds.max) {
-                                colorBounds.min -= 0.5;
-                                colorBounds.max += 0.5;
-                            }
-                            // Limit the bounds of the color value to be within the range.  Users may override the axis bounds and this
-                            // allows a 2 color scale rather than blending if the min and max are set to 0 and 0.01 for example negative values
-                            // and zero value would be 1 color and positive another.
-                            colorBounds.min = (series.c.overrideMin !== null && series.c.overrideMin !== undefined ? series.c.overrideMin : colorBounds.min);
-                            colorBounds.max = (series.c.overrideMax !== null && series.c.overrideMax !== undefined ? series.c.overrideMax : colorBounds.max);
-                            ret.cValue = (ret.cValue > colorBounds.max ? colorBounds.max : (ret.cValue < colorBounds.min ? colorBounds.min : ret.cValue));
-                            // Calculate the factors for the calculations
-                            scale = d3.scale.linear().range([0, (series.c.colors === null || series.c.colors.length === 1 ? 1 : series.c.colors.length - 1)]).domain([colorBounds.min, colorBounds.max]);
-                            colorVal = scale(ret.cValue);
-                            floatingPortion = colorVal - Math.floor(colorVal);
-                            if (ret.cValue === colorBounds.max) {
-                                floatingPortion = 1;
-                            }
-                            // If there is a single color defined
-                            if (series.c.colors !== null && series.c.colors !== undefined && series.c.colors.length === 1) {
-                                baseColor = d3.rgb(series.c.colors[0]);
-                                targetColor = d3.rgb(this.getColor(ret.aggField.slice(-1)[0]).fill);
-                            } else if (series.c.colors !== null && series.c.colors !== undefined && series.c.colors.length > 1) {
-                                baseColor = d3.rgb(series.c.colors[Math.floor(colorVal)]);
-                                targetColor = d3.rgb(series.c.colors[Math.ceil(colorVal)]);
-                            } else {
-                                baseColor = d3.rgb("white");
-                                targetColor = d3.rgb(this.getColor(ret.aggField.slice(-1)[0]).fill);
-                            }
-                            // Calculate the correct grade of color
-                            baseColor.r = Math.floor(baseColor.r + (targetColor.r - baseColor.r) * floatingPortion);
-                            baseColor.g = Math.floor(baseColor.g + (targetColor.g - baseColor.g) * floatingPortion);
-                            baseColor.b = Math.floor(baseColor.b + (targetColor.b - baseColor.b) * floatingPortion);
-                            // Set the colors on the row
-                            ret.fill = baseColor.toString();
-                            ret.stroke = baseColor.darker(0.5).toString();
-                        }
-
-                    }, this);
 
                     // populate the data in the series
                     series._positionData = returnData;
@@ -885,7 +1285,23 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+          // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/chart/methods/_handleTransition.js
+        this._handleTransition = function (input, duration, chart, series) {
+            var returnShape = null;
+            if (duration === 0) {
+                returnShape = input;
+            } else {
+                returnShape = input.transition()
+                    .duration(duration)
+                    .delay(chart._getDelay(duration, chart, series))
+                    .ease(chart.ease);
+            }
+            return returnShape;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_heightPixels.js
         // Access the pixel value of the height of the plot area
@@ -893,23 +1309,15 @@ window.dimple = dimple;
             return dimple._parseYPosition(this.height, this.svg.node());
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_registerEventHandlers.js
         // Register events, handle standard d3 shape events
         this._registerEventHandlers = function (series) {
             if (series._eventHandlers !== null && series._eventHandlers.length > 0) {
                 series._eventHandlers.forEach(function (thisHandler) {
-                    var shapes = null;
-                    if (thisHandler.handler !== null && typeof (thisHandler.handler) === "function") {
-                        // Some classes work from markers rather than the shapes (line and area for example)
-                        // in these cases the events should be applied to the markers instead.  Issue #15
-                        if (series._markers !== null && series._markers !== undefined) {
-                            shapes = series._markers;
-                        } else {
-                            shapes = series.shapes;
-                        }
-                        shapes.on(thisHandler.event, function (d) {
+                    var name,
+                        handler = function (d) {
                             var e = new dimple.eventArgs();
                             if (series.chart.storyboard !== null) {
                                 e.frameValue = series.chart.storyboard.getFrameValue();
@@ -918,63 +1326,105 @@ window.dimple = dimple;
                             e.xValue = d.x;
                             e.yValue = d.y;
                             e.zValue = d.z;
+                            e.pValue = d.p;
                             e.colorValue = d.cValue;
                             e.seriesShapes = series.shapes;
                             e.selectedShape = d3.select(this);
                             thisHandler.handler(e);
-                        });
+                        };
+                    if (thisHandler.handler !== null && typeof (thisHandler.handler) === "function") {
+                        // Some classes work from markers rather than the shapes (line and area for example)
+                        // in these cases the events should be applied to the markers instead.  Issue #15
+                        if (series._markers !== null && series._markers !== undefined) {
+                            for (name in series._markers) {
+                                if (series._markers.hasOwnProperty(name)) {
+                                    series._markers[name].on(thisHandler.event, handler);
+                                }
+                            }
+                        } else {
+                            series.shapes.on(thisHandler.event, handler);
+                        }
                     }
                 }, this);
             }
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_widthPixels.js
         // Access the pixel value of the width of the plot area
         this._widthPixels = function () {
             return dimple._parseXPosition(this.width, this.svg.node());
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_xPixels.js
         // Access the pixel position of the x co-ordinate of the plot area
         this._xPixels = function () {
             return dimple._parseXPosition(this.x, this.svg.node());
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/_yPixels.js
         // Access the pixel position of the y co-ordinate of the plot area
         this._yPixels = function () {
             return dimple._parseYPosition(this.y, this.svg.node());
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addAxis
-        this.addAxis = function (position, categoryFields, measure, timeField) {
+        this.addAxis  = function (position, categoryFields, measure, timeField) {
+            // The axis to return
+            var axis = null,
+                master = null;
             // Convert the passed category fields to an array in case a single string is sent
             if (categoryFields !== null && categoryFields !== undefined) {
                 categoryFields = [].concat(categoryFields);
             }
-            // Create the axis object based on the passed parameters
-            var axis = new dimple.axis(
-                this,
-                position,
-                categoryFields,
-                measure,
-                timeField
-            );
-            // Add the axis to the array for the chart
-            this.axes.push(axis);
+            // If this is a standard axis a position will have been passed as a string
+            if ((typeof position) === "string" || (position instanceof String)) {
+                // Create the axis object based on the passed parameters
+                axis = new dimple.axis(
+                    this,
+                    position,
+                    categoryFields,
+                    measure,
+                    timeField
+                );
+                // Add the axis to the array for the chart
+                this.axes.push(axis);
+
+            } else {
+                // In the case of a composite axis the position will contain another axis
+                // To make this code more readable reassign the position to a different variable
+                master = position;
+                // Construct the axis object
+                axis = new dimple.axis(
+                    this,
+                    master.position,
+                    categoryFields,
+                    measure,
+                    timeField
+                );
+                // Validate that the master and child axes are compatible
+                if (axis._hasMeasure() !== master._hasMeasure()) {
+                    throw "You have specified a composite axis where some but not all axes have a measure - this is not supported, all axes must be of the same type.";
+                } else if (axis._hasTimeField() !== master._hasTimeField()) {
+                    throw "You have specified a composite axis where some but not all axes have a time field - this is not supported, all axes must be of the same type.";
+                } else if ((axis.categoryFields === null || axis.categoryFields === undefined ? 0 : axis.categoryFields.length) !== (master.categoryFields === null || master.categoryFields === undefined ? 0 : master.categoryFields.length)) {
+                    throw "You have specified a composite axis where axes have differing numbers of category fields - this is not supported, all axes must be of the same type.";
+                }
+                // Do not add the axis to the chart's axes array, instead add it the master
+                master._slaves.push(axis);
+            }
             // return the axis
             return axis;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addCategoryAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addCategoryAxis
@@ -983,7 +1433,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addColorAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addColorAxis
@@ -1007,7 +1457,7 @@ window.dimple = dimple;
             // Return the legend object
             return legend;
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addLogAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addLogAxis
@@ -1019,7 +1469,7 @@ window.dimple = dimple;
             axis.useLog = true;
             return axis;
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addMeasureAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addMeasureAxis
@@ -1028,7 +1478,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addPctAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addPctAxis
@@ -1044,7 +1494,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addSeries.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addSeries
@@ -1058,6 +1508,7 @@ window.dimple = dimple;
                 yAxis = null,
                 zAxis = null,
                 colorAxis = null,
+                pieAxis = null,
                 series;
             // Iterate the array and pull out the relevant axes
             axes.forEach(function (axis) {
@@ -1070,11 +1521,13 @@ window.dimple = dimple;
                         zAxis = axis;
                     } else if (colorAxis === null && axis.position[0] === "c") {
                         colorAxis = axis;
+                    } else if (colorAxis === null && axis.position[0] === "p") {
+                        pieAxis = axis;
                     }
                 }
             }, this);
             // Put single values into single value arrays
-            if (categoryFields !== null && categoryFields !== undefined) {
+            if (categoryFields) {
                 categoryFields = [].concat(categoryFields);
             }
             // Create a series object
@@ -1085,6 +1538,7 @@ window.dimple = dimple;
                 yAxis,
                 zAxis,
                 colorAxis,
+                pieAxis,
                 plotFunction,
                 dimple.aggregateMethod.sum,
                 plotFunction.stacked
@@ -1096,7 +1550,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/addTimeAxis.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-addTimeAxis
@@ -1108,7 +1562,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/assignColor.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-assignColor
@@ -1118,7 +1572,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/defaultColors.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-defaultColors
@@ -1136,13 +1590,13 @@ window.dimple = dimple;
             new dimple.color("#FCCDE5"), // Pink
             new dimple.color("#D9D9D9")  // Grey
         ];
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/draw.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-draw
         this.draw = function (duration, noDataChange) {
             // Deal with optional parameter
-            duration = (duration === null || duration === undefined ? 0 : duration);
+            duration = duration || 0;
             // Catch the first x and y
             var firstX = null,
                 firstY = null,
@@ -1152,7 +1606,8 @@ window.dimple = dimple;
                 chartX = this._xPixels(),
                 chartY = this._yPixels(),
                 chartWidth = this._widthPixels(),
-                chartHeight = this._heightPixels();
+                chartHeight = this._heightPixels(),
+                linkedDimensions;
 
             // Many of the draw methods use positioning data in each series.  Therefore we should
             // decorate the series with it now
@@ -1160,11 +1615,17 @@ window.dimple = dimple;
                 this._getSeriesData();
             }
 
+            // Clear all scales, this is required to fix Issue #67
+            this.axes.forEach(function (axis) {
+                axis._scale = null;
+            }, this);
+
             // Iterate the axes and calculate bounds, this is done within the chart because an
             // axis' bounds are determined by other axes and the way that series tie them together
             this.axes.forEach(function (axis) {
                 axis._min = 0;
                 axis._max = 0;
+                linkedDimensions = [];
                 // Check that the axis has a measure
                 if (axis._hasMeasure()) {
                     // Is this axis linked to a series
@@ -1172,7 +1633,7 @@ window.dimple = dimple;
                     // Find any linked series
                     this.series.forEach(function (series) {
                         // if this axis is linked
-                        if (series[axis.position] === axis) {
+                        if (series._deepMatch(axis)) {
                             // Get the bounds
                             var bounds = series._axisBounds(axis.position);
                             if (axis._min > bounds.min) { axis._min = bounds.min; }
@@ -1193,28 +1654,60 @@ window.dimple = dimple;
                     // Parse the dates and assign the min and max
                     axis._min = null;
                     axis._max = null;
-                    this._getAllData().forEach(function (d) {
-                        var dt = axis._parseDate(d[axis.timeField]);
-                        if (axis._min === null || dt < axis._min) {
-                            axis._min = dt;
+                    // Create an array of dimensions for this axis
+                    this.series.forEach(function (series) {
+                        // if this axis is linked
+                        if (series._deepMatch(axis)
+                                && series[axis.position].timeField !== null
+                                && series[axis.position].timeField !== undefined
+                                && linkedDimensions.indexOf(series[axis.position].timeField) === -1) {
+                            linkedDimensions.push(series[axis.position].timeField);
                         }
-                        if (axis._max === null || dt > axis._max) {
-                            axis._max = dt;
-                        }
+                    }, this);
+                    // Iterate the data
+                    axis._getAxisData().forEach(function (d) {
+                        // Find any linked series
+                        linkedDimensions.forEach(function (dimension) {
+                            // Check it's timeField
+                            var dt = axis._parseDate(d[dimension]);
+                            if (axis._min === null || dt < axis._min) {
+                                axis._min = dt;
+                            }
+                            if (axis._max === null || dt > axis._max) {
+                                axis._max = dt;
+                            }
+                        }, this);
                     }, this);
                 } else if (axis._hasCategories()) {
                     // A category axis is just set to show the number of categories
                     axis._min = 0;
                     distinctCats = [];
-                    this._getAllData().forEach(function (d) {
-                        if (distinctCats.indexOf(d[axis.categoryFields[0]]) === -1) {
-                            distinctCats.push(d[axis.categoryFields[0]]);
+                    // Create an array of dimensions for this axis
+                    this.series.forEach(function (series) {
+                        // if this axis is linked
+                        if (series._deepMatch(axis)
+                                && series[axis.position].categoryFields[0] !== null
+                                && series[axis.position].categoryFields[0] !== undefined
+                                && linkedDimensions.indexOf(series[axis.position].categoryFields[0]) === -1) {
+                            linkedDimensions.push(series[axis.position].categoryFields[0]);
                         }
+                    }, this);
+                    axis._getAxisData().forEach(function (d) {
+                        linkedDimensions.forEach(function (dimension) {
+                            if (distinctCats.indexOf(d[dimension]) === -1) {
+                                distinctCats.push(d[dimension]);
+                            }
+                        }, this);
                     }, this);
                     axis._max = distinctCats.length;
                 }
-
-
+                // Set the bounds on all slaves
+                if (axis._slaves !== null && axis._slaves !== undefined && axis._slaves.length > 0) {
+                    axis._slaves.forEach(function (slave) {
+                        slave._min = axis._min;
+                        slave._max = axis._max;
+                    }, this);
+                }
                 // Update the axis now we have all information set
                 axis._update();
 
@@ -1232,18 +1725,49 @@ window.dimple = dimple;
                     transform = null,
                     gridSize = 0,
                     gridTransform = null,
-                    handleTrans,
                     rotated = false,
                     widest = 0,
                     box = { l: null, t: null, r: null, b: null },
                     titleX = 0,
                     titleY = 0,
                     rotate = "",
-                    chart = this;
+                    chart = this,
+                    handleTrans = function (ob) {
+                        // Draw the axis
+                        // This code might seem unnecessary but even applying a duration of 0 to a transition will cause the code to execute after the
+                        // code below and precedence is important here.
+                        var returnObj;
+                        if (transform === null || duration === 0 || firstDraw) {
+                            returnObj = ob;
+                        } else {
+                            returnObj = chart._handleTransition(ob, duration, chart);
+                        }
+                        return returnObj;
+                    },
+                    transformLabels = function () {
+                        if (!axis.measure) {
+                            if (axis.position === "x") {
+                                d3.select(this).selectAll("text").attr("x", (chartWidth / axis._max) / 2);
+                            } else if (axis.position === "y") {
+                                d3.select(this).selectAll("text").attr("y", -1 * (chartHeight / axis._max) / 2);
+                            }
+                        }
+                        if (axis.categoryFields && axis.categoryFields.length > 0) {
+                            // Off set the labels to counter the transform.  This will put the labels along the outside of the chart so they
+                            // don't interfere with the chart contents
+                            if (axis === firstX && (firstY.categoryFields === null || firstY.categoryFields.length === 0)) {
+                                d3.select(this).selectAll("text").attr("y", chartY + chartHeight - firstY._scale(0) + 9);
+                            }
+                            if (axis === firstY && (firstX.categoryFields === null || firstX.categoryFields.length === 0)) {
+                                d3.select(this).selectAll("text").attr("x", -1 * (firstX._scale(0) - chartX) - 9);
+                            }
+                        }
+                    };
+
                 if (axis.gridlineShapes === null) {
                     if (axis.showGridlines || (axis.showGridlines === null && !axis._hasCategories() && ((!xGridSet && axis.position === "x") || (!yGridSet && axis.position === "y")))) {
                         // Add a group for the gridlines to allow css formatting
-                        axis.gridlineShapes = this._group.append("g").attr("class", "gridlines");
+                        axis.gridlineShapes = this._group.append("g").attr("class", "dimple-gridline");
                         if (axis.position === "x") {
                             xGridSet = true;
                         } else {
@@ -1259,7 +1783,15 @@ window.dimple = dimple;
                 }
                 if (axis.shapes === null) {
                     // Add a group for the axes to allow css formatting
-                    axis.shapes = this._group.append("g").attr("class", "axis");
+                    axis.shapes = this._group.append("g")
+                        .attr("class", "dimple-axis")
+                        .each(function () {
+                            if (!chart.noFormats) {
+                                d3.select(this)
+                                    .style("font-family", axis.fontFamily)
+                                    .style("font-size", axis._getFontSize());
+                            }
+                        });
                     firstDraw = true;
                 }
                 // If this is the first x and there is a y axis cross them at zero
@@ -1278,55 +1810,36 @@ window.dimple = dimple;
                     gridTransform = transform = "translate(" + (axis === firstY ? chartX : chartX + chartWidth) + ", 0)";
                     gridSize = -chartWidth;
                 }
-                // Draw the axis
-                // This code might seem unneccesary but even applying a duration of 0 to a transition will cause the code to execute after the 
-                // code below and precedence is important here.
-                handleTrans = function (ob) {
-                    var returnObj;
-                    if (transform === null || duration === 0 || firstDraw) {
-                        returnObj = ob;
-                    } else {
-                        returnObj = ob.transition().duration(duration);
-                    }
-                    return returnObj;
-                };
                 if (transform !== null && axis._draw !== null) {
 
                     // Add a tick format
                     if (axis._hasTimeField()) {
-                        handleTrans(axis.shapes).call(axis._draw.ticks(axis._getTimePeriod(), axis.timeInterval).tickFormat(axis._getFormat())).attr("transform", transform);
+                        handleTrans(axis.shapes)
+                            .call(axis._draw.ticks(axis._getTimePeriod(), axis.timeInterval).tickFormat(axis._getFormat()))
+                            .attr("transform", transform)
+                            .each(transformLabels);
                     } else if (axis.useLog) {
-                        handleTrans(axis.shapes).call(axis._draw.ticks(4, axis._getFormat())).attr("transform", transform);
+                        handleTrans(axis.shapes)
+                            .call(axis._draw.ticks(4, axis._getFormat()))
+                            .attr("transform", transform)
+                            .each(transformLabels);
                     } else {
-                        handleTrans(axis.shapes).call(axis._draw.tickFormat(axis._getFormat())).attr("transform", transform);
+                        handleTrans(axis.shapes)
+                            .call(axis._draw.tickFormat(axis._getFormat()))
+                            .attr("transform", transform)
+                            .each(transformLabels);
                     }
                     if (axis.gridlineShapes !== null) {
-                        handleTrans(axis.gridlineShapes).call(axis._draw.tickSize(gridSize, 0, 0).tickFormat("")).attr("transform", gridTransform);
-                    }
-                    // Move labels around
-                    if (axis.measure === null || axis.measure === undefined) {
-                        if (axis.position === "x") {
-                            handleTrans(axis.shapes.selectAll("text")).attr("x", (chartWidth / axis._max) / 2);
-                        } else if (axis.position === "y") {
-                            handleTrans(axis.shapes.selectAll("text")).attr("y", -1 * (chartHeight / axis._max) / 2);
-                        }
-                    }
-                    if (axis.categoryFields !== null && axis.categoryFields !== undefined && axis.categoryFields.length > 0) {
-                        // Off set the labels to counter the transform.  This will put the labels along the outside of the chart so they
-                        // don't interfere with the chart contents
-                        if (axis === firstX && (firstY.categoryFields === null || firstY.categoryFields.length === 0)) {
-                            handleTrans(axis.shapes.selectAll("text")).attr("y", chartY + chartHeight - firstY._scale(0) + 9);
-                        }
-                        if (axis === firstY && (firstX.categoryFields === null || firstX.categoryFields.length === 0)) {
-                            handleTrans(axis.shapes.selectAll("text")).attr("x", -1 * (firstX._scale(0) - chartX) - 9);
-                        }
+                        handleTrans(axis.gridlineShapes)
+                            .call(axis._draw.tickSize(gridSize, 0, 0).tickFormat(""))
+                            .attr("transform", gridTransform);
                     }
                 }
                 // Set some initial css values
                 if (!this.noFormats) {
                     handleTrans(axis.shapes.selectAll("text"))
-                        .style("font-family", "sans-serif")
-                        .style("font-size", (chartHeight / 35 > 10 ? chartHeight / 35 : 10) + "px");
+                        .style("font-family", axis.fontFamily)
+                        .style("font-size", axis._getFontSize());
                     handleTrans(axis.shapes.selectAll("path, line"))
                         .style("fill", "none")
                         .style("stroke", "black")
@@ -1436,20 +1949,21 @@ window.dimple = dimple;
                     rotate = "rotate(270, " + titleX + ", " + titleY + ")";
                 }
 
-                // Add a title for the axis
-                if (!axis.hidden && (axis.position === "x" || axis.position === "y")) {
-                    axis.titleShape = this._group.append("text").attr("class", "axis title");
+                // Add a title for the axis - NB check for null here, by default the title is undefined, in which case
+                // use the dimension name
+                if (!axis.hidden && (axis.position === "x" || axis.position === "y") && axis.title !== null) {
+                    axis.titleShape = this._group.append("text").attr("class", "dimple-axis dimple-title");
                     axis.titleShape
                         .attr("x", titleX)
                         .attr("y", titleY)
                         .attr("text-anchor", "middle")
                         .attr("transform", rotate)
-                        .text((axis.categoryFields === null || axis.categoryFields === undefined || axis.categoryFields.length === 0 ? axis.measure : axis.categoryFields.join("/")))
+                        .text(axis.title !== undefined ? axis.title : (axis.categoryFields === null || axis.categoryFields === undefined || axis.categoryFields.length === 0 ? axis.measure : axis.categoryFields.join("/")))
                         .each(function () {
                             if (!chart.noFormats) {
                                 d3.select(this)
-                                    .style("font-family", "sans-serif")
-                                    .style("font-size", (chartHeight / 35 > 10 ? chartHeight / 35 : 10) + "px");
+                                    .style("font-family", axis.fontFamily)
+                                    .style("font-size", axis._getFontSize());
                             }
                         });
 
@@ -1476,11 +1990,11 @@ window.dimple = dimple;
 
             // Iterate the legends
             this.legends.forEach(function (legend) {
-                legend._draw(duration);
+                legend._draw();
             }, this);
 
             // If the chart has a storyboard
-            if (this.storyboard !== null && this.storyboard !== undefined) {
+            if (this.storyboard) {
                 this.storyboard._drawText();
                 if (this.storyboard.autoplay) {
                     this.storyboard.startAnimation();
@@ -1492,7 +2006,7 @@ window.dimple = dimple;
 
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/getColor.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-getColor
@@ -1507,7 +2021,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/setBounds.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-setBounds
@@ -1521,6 +2035,7 @@ window.dimple = dimple;
             this._xPixels = function () {
                 return dimple._parseXPosition(this.x, this.svg.node());
             };
+            this.draw(0, true);
             // Access the pixel value of the y coordinate
             this._yPixels = function () {
                 return dimple._parseYPosition(this.y, this.svg.node());
@@ -1534,13 +2049,12 @@ window.dimple = dimple;
                 return dimple._parseYPosition(this.height, this.svg.node());
             };
             // Refresh the axes to redraw them against the new bounds
-            this.draw(0, true);
             // return the chart object for method chaining
             return this;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/setMargins.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-setMargins
@@ -1573,7 +2087,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/chart/methods/setStoryboard.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.chart#wiki-setStoryboard
@@ -1592,7 +2106,7 @@ window.dimple = dimple;
     // End dimple.chart
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/color/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.color
@@ -1609,7 +2123,7 @@ window.dimple = dimple;
     // End dimple.color
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/eventArgs/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.eventArgs
@@ -1623,6 +2137,8 @@ window.dimple = dimple;
         this.yValue = null;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.eventArgs#wiki-zValue
         this.zValue = null;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.eventArgs#wiki-pValue
+        this.pValue = null;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.eventArgs#wiki-colorValue
         this.colorValue = null;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.eventArgs#wiki-frameValue
@@ -1636,7 +2152,7 @@ window.dimple = dimple;
     // End dimple.eventArgs
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/legend/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.legend
@@ -1658,11 +2174,16 @@ window.dimple = dimple;
         this.horizontalAlign = horizontalAlign;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.legend#wiki-shapes
         this.shapes = null;
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.legend#wiki-fontSize
+        this.fontSize = "10px";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.legend#wiki-fontFamily
+        this.fontFamily = "sans-serif";
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_draw.js
         // Render the legend
-        this._draw = function (duration) {
+        this._draw = function () {
 
             // Create an array of distinct color elements from the series
             var legendArray = this._getEntries(),
@@ -1675,37 +2196,36 @@ window.dimple = dimple;
                 self = this,
                 theseShapes;
 
-            // If there is already a legend, fade to transparent and remove
-            if (this.shapes !== null && this.shapes !== undefined) {
-                this.shapes
-                    .transition()
-                    .duration(duration * 0.2)
-                    .attr("opacity", 0)
-                    .remove();
+            // If there is already a legend remove it
+            if (this.shapes) {
+                this.shapes.remove();
             }
 
             // Create an empty hidden group for every legend entry
             // the selector here must not pick up any legend entries being removed by the
             // transition above
             theseShapes = this.chart._group
-                .selectAll(".dontSelectAny")
+                .selectAll(".dimple-dont-select-any")
                 .data(legendArray)
                 .enter()
                 .append("g")
-                    .attr("class", "legend")
-                    .attr("opacity", 0);
+                .attr("class", function (d) {
+                    return "dimple-legend " + dimple._createClass(d.aggField);
+                })
+                .attr("opacity", 1);
 
             // Add text into the group
             theseShapes.append("text")
-                .attr("id", function (d) { return "legend_" + d.key; })
-                .attr("class", "legendText")
+                .attr("class", function (d) {
+                    return "dimple-legend dimple-legend-text " + dimple._createClass(d.aggField);
+                })
                 .text(function(d) {
                     return d.key;
                 })
                 .call(function () {
                     if (!self.chart.noFormats) {
-                        this.style("font-family", "sans-serif")
-                            .style("font-size", (self.chart._heightPixels() / 35 > 10 ? self.chart._heightPixels() / 35 : 10) + "px")
+                        this.style("font-family", self.fontFamily)
+                            .style("font-size", self._getFontSize())
                             .style("shape-rendering", "crispEdges");
                     }
                 })
@@ -1721,7 +2241,9 @@ window.dimple = dimple;
 
             // Add a rectangle into the group
             theseShapes.append("rect")
-                .attr("class", "legendKey")
+                .attr("class", function (d) {
+                    return "dimple-legend dimple-legend-key " + dimple._createClass(d.aggField);
+                })
                 .attr("height", keyHeight)
                 .attr("width",  keyWidth);
 
@@ -1744,37 +2266,32 @@ window.dimple = dimple;
                             .attr("x", (self.horizontalAlign === "left" ? self._xPixels() + keyWidth + 5 + runningX : self._xPixels() + (self._widthPixels() - runningX - maxWidth) + keyWidth + 5))
                             .attr("y", function () {
                                 // This was previously done with dominant-baseline but this is used
-                                // instead due to browser inconsistancy.
+                                // instead due to browser inconsistency.
                                 return self._yPixels() + runningY + this.getBBox().height / 1.65;
                             })
                             .attr("width", self._widthPixels())
                             .attr("height", self._heightPixels());
                         d3.select(this).select("rect")
-                            .attr("class", "legend legendKey")
+                            .attr("class", function (d) {
+                                return "dimple-legend dimple-legend-key " + dimple._createClass(d.aggField);
+                            })
                             .attr("x", (self.horizontalAlign === "left" ? self._xPixels() + runningX : self._xPixels() + (self._widthPixels() - runningX - maxWidth)))
                             .attr("y", self._yPixels() + runningY)
                             .attr("height", keyHeight)
                             .attr("width",  keyWidth)
-                            .style("fill", function () { return dimple._helpers.fill(d, self.chart, d.series); })
-                            .style("stroke", function () { return dimple._helpers.stroke(d, self.chart, d.series); })
-                            .style("opacity", function () { return dimple._helpers.opacity(d, self.chart, d.series); })
+                            .style("fill", d.fill)
+                            .style("stroke", d.stroke)
+                            .style("opacity", d.opacity)
                             .style("shape-rendering", "crispEdges");
                         runningX += maxWidth;
                     }
                 });
 
-            // Fade in the shapes if this is transitioning
-            theseShapes
-                .transition()
-                .delay(duration * 0.2)
-                .duration(duration * 0.8)
-                .attr("opacity", 1);
-
             // Assign them to the public property for modification by the user.
             this.shapes = theseShapes;
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_getEntries.js
         // Get an array of elements to be displayed in the legend
@@ -1782,7 +2299,7 @@ window.dimple = dimple;
             // Create an array of distinct series values
             var entries = [];
             // If there are some series
-            if (this.series !== null && this.series !== undefined) {
+            if (this.series) {
                 // Iterate all the associated series
                 this.series.forEach(function (series) {
                     // Get the series data
@@ -1791,16 +2308,25 @@ window.dimple = dimple;
                     data.forEach(function (row) {
                         // Check whether this element is new
                         var index = -1,
-                            j;
+                            j,
+                            // Handle grouped plots (e.g. line and area where multiple points are coloured the same way
+                            field = ((series.plot.grouped && !series.x._hasCategories() && !series.y._hasCategories() && row.aggField.length < 2 ? "All" : row.aggField.slice(-1)[0]));
                         for (j = 0; j < entries.length; j += 1) {
-                            if (entries[j].key === row.aggField.slice(-1)[0]) {
+                            if (entries[j].key === field) {
                                 index = j;
                                 break;
                             }
                         }
-                        if (index === -1) {
+                        if (index === -1 && series.chart._assignedColors[field]) {
                             // If it's a new element create a new row in the return array
-                            entries.push({ key: row.aggField.slice(-1)[0], fill: row.fill, stroke: row.stroke, series: series, aggField: row.aggField });
+                            entries.push({
+                                key: field,
+                                fill: series.chart._assignedColors[field].fill,
+                                stroke: series.chart._assignedColors[field].stroke,
+                                opacity: series.chart._assignedColors[field].opacity,
+                                series: series,
+                                aggField: row.aggField
+                            });
                             index = entries.length - 1;
                         }
                     });
@@ -1809,7 +2335,22 @@ window.dimple = dimple;
             return entries;
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/legend/methods/_getFontSize.js
+        this._getFontSize = function () {
+            var fontSize;
+            if (!this.fontSize || this.fontSize.toString().toLowerCase() === "auto") {
+                fontSize = (this.chart._heightPixels() / 35 > 10 ? this.chart._heightPixels() / 35 : 10) + "px";
+            } else if (!isNaN(this.fontSize)) {
+                fontSize = this.fontSize + "px";
+            } else {
+                fontSize = this.fontSize;
+            }
+            return fontSize;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_heightPixels.js
         // Access the pixel value of the height of the legend area
@@ -1817,21 +2358,21 @@ window.dimple = dimple;
             return dimple._parseYPosition(this.height, this.chart.svg.node());
         };
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_widthPixels.js
         // Access the pixel value of the width of the legend area
         this._widthPixels = function () {
             return dimple._parseXPosition(this.width, this.chart.svg.node());
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_xPixels.js
         // Access the pixel position of the x co-ordinate of the legend area
         this._xPixels = function () {
             return dimple._parseXPosition(this.x, this.chart.svg.node());
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/legend/methods/_yPixels.js
         // Access the pixel position of the y co-ordinate of the legend area
@@ -1842,11 +2383,11 @@ window.dimple = dimple;
     // End dimple.legend
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/series/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series
-    dimple.series = function (chart, categoryFields, xAxis, yAxis, zAxis, colorAxis, plotFunction, aggregateFunction, stacked) {
+    dimple.series = function (chart, categoryFields, xAxis, yAxis, zAxis, colorAxis, pieAxis, plotFunction, aggregateFunction, stacked) {
 
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-chart
         this.chart = chart;
@@ -1858,6 +2399,8 @@ window.dimple = dimple;
         this.z = zAxis;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-c
         this.c = colorAxis;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-p
+        this.p = pieAxis;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-plot
         this.plot = plotFunction;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-categoryFields
@@ -1874,6 +2417,16 @@ window.dimple = dimple;
         this.lineWeight = 2;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-lineMarkers
         this.lineMarkers = false;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-afterDraw
+        this.afterDraw = null;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-interpolation
+        this.interpolation = "linear";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-fontSize
+        this.tooltipFontSize = "10px";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-fontFamily
+        this.tooltipFontFamily = "sans-serif";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.axis#wiki-radius
+        this.radius = "auto";
 
         // Any event handlers joined to this series
         this._eventHandlers = [];
@@ -1882,7 +2435,7 @@ window.dimple = dimple;
         // The order definition array
         this._orderRules = [];
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/series/methods/_axisBounds.js
         this._axisBounds = function (position) {
@@ -1909,6 +2462,8 @@ window.dimple = dimple;
                 secondaryAxis = this.x;
             } else if (position === "z") {
                 primaryAxis = this.z;
+            } else if (position === "p") {
+                primaryAxis = this.p;
             } else if (position === "c") {
                 primaryAxis = this.c;
             }
@@ -1927,7 +2482,7 @@ window.dimple = dimple;
             } else if (secondaryAxis === null || secondaryAxis.categoryFields === null || secondaryAxis.categoryFields.length === 0) {
                 aggData.forEach(function (d) {
                     // If the primary axis is stacked
-                    if (this.stacked && (primaryAxis.position === "x" || primaryAxis.position === "y")) {
+                    if (this._isStacked() && (primaryAxis.position === "x" || primaryAxis.position === "y")) {
                         // We just need to push the bounds.  A stacked axis will always include 0 so I just need to push the min and max out from there
                         if (d[primaryAxis.position + "Value"] < 0) {
                             bounds.min = bounds.min + d[primaryAxis.position + "Value"];
@@ -1998,7 +2553,24 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/series/methods/_deepMatch.js
+        this._deepMatch = function (axis) {
+            // Return true if this series is dependant on the axis or any of its dependants
+            var match = false;
+            if (this[axis.position] === axis) {
+                match = true;
+            } else if (axis._slaves !== undefined && axis._slaves !== null && axis._slaves.length > 0) {
+                axis._slaves.forEach(function (slave) {
+                    match = (match || this._deepMatch(slave));
+                }, this);
+            }
+            return match;
+        };
+
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/series/methods/_dropLineOrigin.js
         this._dropLineOrigin = function() {
@@ -2037,8 +2609,8 @@ window.dimple = dimple;
             // Get the axis position based on the axis index
             this.chart.axes.forEach(function (axis) {
                 if (axis.position === "x" && !this.x.hidden) {
-                    if (axis === this.x) {
-                        // Set the y co-ordinate for the x axis 
+                    if (this._deepMatch(axis)) {
+                        // Set the y co-ordinate for the x axis
                         if (xIndex === 0) {
                             coord.y = firstOrig.y;
                         } else if (xIndex === 1) {
@@ -2047,7 +2619,7 @@ window.dimple = dimple;
                     }
                     xIndex += 1;
                 } else if (axis.position === "y" && !this.y.hidden) {
-                    if (axis === this.y) {
+                    if (this._deepMatch(axis)) {
                         // Set the x co-ordinate for the y axis 
                         if (yIndex === 0) {
                             coord.x = firstOrig.x;
@@ -2062,7 +2634,28 @@ window.dimple = dimple;
             // Return the co-ordinate
             return coord;
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/series/methods/_getTooltipFontSize.js
+        this._getTooltipFontSize = function () {
+            var fontSize;
+            if (!this.tooltipFontSize || this.tooltipFontSize.toString().toLowerCase() === "auto") {
+                fontSize = (this.chart._heightPixels() / 35 > 10 ? this.chart._heightPixels() / 35 : 10) + "px";
+            } else if (!isNaN(this.tooltipFontSize)) {
+                fontSize = this.tooltipFontSize + "px";
+            } else {
+                fontSize = this.tooltipFontSize;
+            }
+            return fontSize;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/series/methods/_isStacked.js
+        this._isStacked = function() {
+            return this.stacked && (this.x._hasCategories() || this.y._hasCategories());
+        };
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/series/methods/addEventHandler.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-addEventHandler
@@ -2071,18 +2664,62 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/series/methods/addOrderRule.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.series#wiki-addOrderRule
         this.addOrderRule = function (ordering, desc) {
             this._orderRules.push({ ordering : ordering, desc : desc });
         };
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/series/methods/getTooltipText.js
+        this.getTooltipText = function (e) {
+            var rows = [];
+            // Add the series categories
+            if (this.categoryFields !== null && this.categoryFields !== undefined && this.categoryFields.length > 0) {
+                this.categoryFields.forEach(function (c, i) {
+                    if (c !== null && c !== undefined && e.aggField[i] !== null && e.aggField[i] !== undefined) {
+                        // If the category name and value match don't display the category name
+                        rows.push(c + (e.aggField[i] !== c ? ": " + e.aggField[i] : ""));
+                    }
+                }, this);
+            }
+
+
+            if (!this.p) {
+                if (this.x) {
+                    this.x._getTooltipText(rows, e);
+                }
+                if (this.y) {
+                    this.y._getTooltipText(rows, e);
+                }
+                if (this.z) {
+                    this.z._getTooltipText(rows, e);
+                }
+            } else {
+                if (this.x && this.x._hasCategories()) {
+                    this.x._getTooltipText(rows, e);
+                }
+                if (this.y && this.y._hasCategories()) {
+                    this.y._getTooltipText(rows, e);
+                }
+                if (this.z && this.z._hasCategories()) {
+                    this.z._getTooltipText(rows, e);
+                }
+                this.p._getTooltipText(rows, e);
+            }
+            if (this.c) {
+                this.c._getTooltipText(rows, e);
+            }
+            // Get distinct text rows to deal with cases where 2 axes have the same dimensionality
+            return rows.filter(function (elem, pos) { return rows.indexOf(elem) === pos; });
+        };
     };
     // End dimple.series
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/storyboard/begin.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.storyboard
@@ -2105,6 +2742,10 @@ window.dimple = dimple;
         this.storyLabel = null;
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.storyboard#wiki-onTick
         this.onTick = null;
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.storyboard#wiki-fontSize
+        this.fontSize = "10px";
+        // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.storyboard#wiki-fontFamily
+        this.fontFamily = "sans-serif";
 
         // The current frame index
         this._frame = 0;
@@ -2117,12 +2758,13 @@ window.dimple = dimple;
         // The rules for ordering the storyboard
         this._orderRules = [];
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/drawText.js
-        this._drawText = function (duration) {
-            if (this.storyLabel === null || this.storyLabel === undefined) {
+        this._drawText = function () {
+            if (!this.storyLabel) {
                 var chart = this.chart,
+                    self = this,
                     xCount = 0;
                 // Check for a secondary x axis
                 this.chart.axes.forEach(function (a) {
@@ -2131,27 +2773,23 @@ window.dimple = dimple;
                     }
                 }, this);
                 this.storyLabel = this.chart._group.append("text")
+                    .attr("class", "dimple-storyboard-label")
+                    .attr("opacity", 1)
                     .attr("x", this.chart._xPixels() + this.chart._widthPixels() * 0.01)
                     .attr("y", this.chart._yPixels() + (this.chart._heightPixels() / 35 > 10 ? this.chart._heightPixels() / 35 : 10) * (xCount > 1 ? 1.25 : -1))
                     .call(function () {
                         if (!chart.noFormats) {
-                            this.style("font-family", "sans-serif")
-                                .style("font-size", (chart._heightPixels() / 35 > 10 ? chart._heightPixels() / 35 : 10) + "px");
+                            this.style("font-family", self.fontFamily)
+                                .style("font-size", self._getFontSize());
                         }
                     });
             }
             this.storyLabel
-                .transition().duration(duration * 0.2)
-                .attr("opacity", 0);
-            this.storyLabel
-                .transition().delay(duration * 0.2)
-                .text(this.categoryFields.join("\\") + ": " + this.getFrameValue())
-                .transition().duration(duration * 0.8)
-                .attr("opacity", 1);
+                .text(this.categoryFields.join("\\") + ": " + this.getFrameValue());
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/_getCategories.js
         this._getCategories = function() {
@@ -2184,7 +2822,22 @@ window.dimple = dimple;
             // Return the array
             return this._categories;
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
+        // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+        // Source: /src/objects/storyboard/methods/_getFontSize.js
+        this._getFontSize = function () {
+            var fontSize;
+            if (!this.fontSize || this.fontSize.toString().toLowerCase() === "auto") {
+                fontSize = (this.chart._heightPixels() / 35 > 10 ? this.chart._heightPixels() / 35 : 10) + "px";
+            } else if (!isNaN(this.fontSize)) {
+                fontSize = this.fontSize + "px";
+            } else {
+                fontSize = this.fontSize;
+            }
+            return fontSize;
+        };
+
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/_goToFrameIndex.js
         this._goToFrameIndex = function (index) {
@@ -2194,14 +2847,14 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/addOrderRule.js
         // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple.storyboard#wiki-addOrderRule
         this.addOrderRule = function (ordering, desc) {
             this._orderRules.push({ ordering : ordering, desc : desc });
         };
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/getFrameValue.js
         this.getFrameValue = function () {
@@ -2213,7 +2866,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/goToFrame.js
         this.goToFrame = function (frameText) {
@@ -2224,7 +2877,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/pauseAnimation.js
         this.pauseAnimation = function () {
@@ -2235,7 +2888,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/startAnimation.js
         this.startAnimation = function () {
@@ -2254,7 +2907,7 @@ window.dimple = dimple;
         };
 
 
-        // Copyright: 2013 PMSI-AlignAlytics
+        // Copyright: 2014 PMSI-AlignAlytics
         // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
         // Source: /src/objects/storyboard/methods/stopAnimation.js
         this.stopAnimation = function () {
@@ -2270,7 +2923,7 @@ window.dimple = dimple;
     // End dimple.storyboard
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/aggregateMethod/avg.js
     dimple.aggregateMethod.avg = function (lhs, rhs) {
@@ -2281,7 +2934,7 @@ window.dimple = dimple;
         return ((lhs.value * lhs.count) + (rhs.value * rhs.count)) / (lhs.count + rhs.count);
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/aggregateMethod/count.js
     dimple.aggregateMethod.count = function (lhs, rhs) {
@@ -2290,7 +2943,7 @@ window.dimple = dimple;
         return lhs.count + rhs.count;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/aggregateMethod/max.js
     dimple.aggregateMethod.max = function (lhs, rhs) {
@@ -2299,14 +2952,14 @@ window.dimple = dimple;
         return lhs.value > rhs.value ? lhs.value : rhs.value;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/aggregateMethod/min.js
     dimple.aggregateMethod.min = function (lhs, rhs) {
         return (lhs.value === null ? parseFloat(rhs.value) : (parseFloat(lhs.value) < parseFloat(rhs.value) ? parseFloat(lhs.value) : parseFloat(rhs.value)));
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/aggregateMethod/sum.js
     dimple.aggregateMethod.sum = function (lhs, rhs) {
@@ -2315,470 +2968,396 @@ window.dimple = dimple;
         return lhs.value + rhs.value;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/plot/area.js
     dimple.plot.area = {
+
+        // By default the values are stacked
         stacked: true,
 
+        // This is a grouped plot meaning many points are treated as one series value
+        grouped: true,
+
+        // The axis positions affecting the area series
         supportedAxes: ["x", "y", "c"],
 
+        // Draw the axis
         draw: function (chart, series, duration) {
-            // Get self pointer for inner functions
-            var self = this,
-                data = series._positionData,
-                uniqueValues = [],
-                firstAgg = 1,
+            // Get the position data
+            var data = series._positionData,
+                areaData = [],
+                theseShapes = null,
+                className = "dimple-series-" + chart.series.indexOf(series),
+                firstAgg = (series.x._hasCategories() || series.y._hasCategories() ? 0 : 1),
+                interpolation,
                 graded = false,
-                line,
+                i,
+                j,
+                k,
+                key,
+                keyString,
+                rowIndex,
+                updated,
+                removed,
+                orderedSeriesArray,
                 catPoints = {},
-                markers,
-                markerBacks;
+                allPoints = [],
+                points,
+                finalPointArray = [],
+                basePoints,
+                basePoint,
+                cat,
+                catVal,
+                group,
+                p,
+                b,
+                l,
+                lastAngle,
+                catCoord,
+                valCoord,
+                onEnter = function () {
+                    return function (e, shape, chart, series) {
+                        d3.select(shape).style("opacity", 1);
+                        dimple._showPointTooltip(e, shape, chart, series);
+                    };
+                },
+                onLeave = function (lineData) {
+                    return function (e, shape, chart, series) {
+                        d3.select(shape).style("opacity", (series.lineMarkers || lineData.data.length < 2 ? dimple._helpers.opacity(e, chart, series) : 0));
+                        dimple._removeTooltip(e, shape, chart, series);
+                    };
+                },
+                drawMarkers = function (d) {
+                    dimple._drawMarkers(d, chart, series, duration, className, graded, onEnter(d), onLeave(d));
+                },
+                coord = function (position, datum) {
+                    var val;
+                    if (series.interpolation === "step" && series[position]._hasCategories()) {
+                        val = dimple._helpers[position](datum, chart, series) + (position === "y" ? dimple._helpers.height(datum, chart, series) : 0);
+                        if (series[position].categoryFields.length < 2) {
+                            val += (position === "y" ? 1 : -1) * dimple._helpers[position + "Gap"](chart, series);
+                        }
+                    } else {
+                        val = dimple._helpers["c" + position](datum, chart, series);
+                    }
+                    // Remove long decimals from the coordinates as this fills the dom up with noise and makes matching below less likely to work.  It
+                    // shouldn't really matter but positioning to < 0.1 pixel is pretty pointless anyway.  UPDATE: Turns out it isn't, see Issue #79.  points > pixels
+                    // causes multiple points to fall on the same co-ordinate which results in drawing problems.
+                    return parseFloat(val);
+                },
+                getArea = function (inter, originProperty) {
+                    return d3.svg.line()
+                        .x(function (d) { return (series.x._hasCategories() || !originProperty ? d.x : series.x[originProperty]); })
+                        .y(function (d) { return (series.y._hasCategories() || !originProperty ? d.y : series.y[originProperty]); })
+                        .interpolate(inter);
+                },
+                sortByVal = function (a, b) {
+                    return parseFloat(a) - parseFloat(b);
+                },
+                sortByX = function (a, b) {
+                    return parseFloat(a.x) - parseFloat(b.x);
+                },
+                addNextPoint = function (source, target, startAngle) {
+                    // Given a point we need to find the next point clockwise from the start angle
+                    var i,
+                        point = target[target.length - 1],
+                        thisAngle,
+                        bestAngleSoFar = 9999,
+                        returnPoint = point;
+                    for (i = 0; i < source.length; i += 1) {
+                        if (source[i].x !== point.x || source[i].y !== point.y) {
+                            // get the angle in degrees since start angle
+                            thisAngle = 180 - (Math.atan2(source[i].x - point.x, source[i].y - point.y) * (180 / Math.PI));
+                            if (thisAngle > startAngle && thisAngle < bestAngleSoFar) {
+                                returnPoint = source[i];
+                                bestAngleSoFar = thisAngle;
+                            }
+                        }
+                    }
+                    target.push(returnPoint);
+                    return bestAngleSoFar;
+                };
+
+            // Handle the special interpolation handling for step
+            interpolation =  (series.interpolation === "step" ? "step-after" : series.interpolation);
+
+            // Get the array of ordered values
+            orderedSeriesArray = dimple._getSeriesOrder(series.data || chart.data, series);
+
+            if (series.c && ((series.x._hasCategories() && series.y._hasMeasure()) || (series.y._hasCategories() && series.x._hasMeasure()))) {
+                graded = true;
+            }
+
+            // If there is a coordinate with categories get it here so we don't have to keep checking
+            if (series.x._hasCategories()) {
+                catCoord = "x";
+                valCoord = "y";
+            } else if (series.y._hasCategories()) {
+                catCoord = "y";
+                valCoord = "x";
+            }
+
+            // Create a set of area data grouped by the aggregation field
+            for (i = 0; i < data.length; i += 1) {
+                key = [];
+                rowIndex = -1;
+                // Skip the first category unless there is a category axis on x or y
+                for (k = firstAgg; k < data[i].aggField.length; k += 1) {
+                    key.push(data[i].aggField[k]);
+                }
+                // Find the corresponding row in the areaData
+                keyString = dimple._createClass(key);
+                for (k = 0; k < areaData.length; k += 1) {
+                    if (areaData[k].keyString === keyString) {
+                        rowIndex = k;
+                        break;
+                    }
+                }
+                // Add a row to the area data if none was found
+                if (rowIndex === -1) {
+                    rowIndex = areaData.length;
+                    areaData.push({
+                        key: key,
+                        keyString: keyString,
+                        color: "white",
+                        data: [],
+                        points: [],
+                        area: {},
+                        entry: {},
+                        exit: {},
+                        // Group refers to groupings along the category axis.  If there are groupings it will be recorded, otherwise all is used as a default
+                        group: (catCoord && data[i][catCoord + "Field"] && data[i][catCoord + "Field"].length >= 2 ? data[i][catCoord + "Field"][0] : "All")
+                    });
+                }
+                // Add this row to the relevant data
+                areaData[rowIndex].data.push(data[i]);
+            }
+
+            // Sort the area data itself based on the order series array - this matters for stacked areas and default color
+            // consistency with colors usually awarded in terms of prominence
+            if (orderedSeriesArray) {
+                areaData.sort(function (a, b) {
+                    return dimple._arrayIndexCompare(orderedSeriesArray, a.key, b.key);
+                });
+            }
+
+            // Create a set of area data grouped by the aggregation field
+            for (i = 0; i < areaData.length; i += 1) {
+                // Sort the points so that areas are connected in the correct order
+                areaData[i].data.sort(dimple._getSeriesSortPredicate(chart, series, orderedSeriesArray));
+                // Get points here, this is so that as well as drawing the line with them, we can also
+                // use them for the baseline
+                for (j = 0; j < areaData[i].data.length; j += 1) {
+                    areaData[i].points.push({
+                        x: coord("x", areaData[i].data[j]),
+                        y: coord("y", areaData[i].data[j])
+                    });
+                    // if there is a category axis, add the points to a distinct set.  Set these to use the origin value
+                    // this will be updated with the last value in each case as we build the areas
+                    if (catCoord) {
+                        if (!catPoints[areaData[i].group]) {
+                            catPoints[areaData[i].group] = {};
+                        }
+                        catPoints[areaData[i].group][areaData[i].points[areaData[i].points.length - 1][catCoord]] = series[valCoord]._origin;
+                    }
+                }
+                points = areaData[i].points;
+                // If this is a step interpolation we need to add in some extra points to the category axis
+                // This is a little tricky but we need to add a new point duplicating the last category value.  In order
+                // to place the point we need to calculate the gap between the last x and the penultimate x and apply that
+                // gap again.
+                if (series.interpolation === "step" && points.length > 1 && catCoord) {
+                    if (series.x._hasCategories()) {
+                        points.push({
+                            x : 2 * points[points.length - 1].x - points[points.length - 2].x,
+                            y : points[points.length - 1].y
+                        });
+                        catPoints[areaData[i].group][points[points.length - 1][catCoord]] = series[valCoord]._origin;
+                    } else if (series.y._hasCategories()) {
+                        points = [{
+                            x : points[0].x,
+                            y : 2 * points[0].y - points[1].y
+                        }].concat(points);
+                        catPoints[areaData[i].group][points[0][catCoord]] = series[valCoord]._origin;
+                        // The prepend above breaks the reference so it needs to be reapplied here.
+                        areaData[i].points = points;
+                    }
+                }
+            }
+
+            // catPoints needs to be lookup, but also accessed sequentially so we need to create an array of keys
+            for (cat in catPoints) {
+                if (catPoints.hasOwnProperty(cat)) {
+                    allPoints[cat] = [];
+                    for (catVal in catPoints[cat]) {
+                        if (catPoints[cat].hasOwnProperty(catVal)) {
+                            allPoints[cat].push(parseFloat(catVal));
+                        }
+                    }
+                    // Sort the points as integers
+                    allPoints[cat].sort(sortByVal);
+                }
+            }
+
+            // Create the areas
+            for (i = 0; i < areaData.length; i += 1) {
+                points = areaData[i].points;
+                group = areaData[i].group;
+                basePoints = [];
+                finalPointArray = [];
+                // If this should have colour gradients, add them
+                if (graded) {
+                    dimple._addGradient(areaData[i].key, "fill-area-gradient-" + areaData[i].keyString, (series.x._hasCategories() ? series.x : series.y), data, chart, duration, "fill");
+                }
+                // All points will only be populated if there is a category axis
+                if (allPoints[group] && allPoints[group].length > 0) {
+                    // Iterate the point array because we need to fill in zero points for missing ones, otherwise the areas
+                    // will cross where an upper area has no value and a lower value has a spike Issue #7
+                    for (j = 0, k = 0; j < allPoints[group].length; j += 1) {
+                        // We are only interested in points between the first and last point of this areas data (i.e. don't fill ends - important
+                        // for grouped area charts).  We have to use a strange criteria here.  If there are no group gaps on a grouped area
+                        // chart the end point of one series will clash with the start point of another, therefore we have to ignore fill-in's within
+                        // a couple of pixels of the start and end points
+                        if (allPoints[group][j] >= points[0][catCoord] && allPoints[group][j] <= points[points.length - 1][catCoord]) {
+                            // Get a base point, this needs to go on the base points array as well as filling in gaps in the point array.
+                            // Create a point using the coordinate on the category axis and the last recorded value
+                            // position from the dictionary
+                            basePoint = {};
+                            basePoint[catCoord] = allPoints[group][j];
+                            basePoint[valCoord] = catPoints[group][allPoints[group][j]];
+                            // add the base point
+                            basePoints.push(basePoint);
+                            // handle missing points
+                            if (points[k][catCoord] > allPoints[group][j]) {
+                                // If there is a missing point we need to in fill
+                                finalPointArray.push(basePoint);
+                            } else {
+                                // They must be the same
+                                finalPointArray.push(points[k]);
+                                // Use this to update the dictionary to the new value coordinate
+                                catPoints[areaData[i].group][allPoints[group][j]] = points[k][valCoord];
+                                k += 1;
+                            }
+                        }
+                    }
+                } else {
+                    // If there is no category axis we need to apply some custom logic.  In order to avoid
+                    // really jagged areas the default behaviour will be to draw from the left most point then rotate a line
+                    // clockwise until it hits another point and continue from each point until back to where we started.  This
+                    // means it will not connect every point, but it will contain every point:
+                    // E.g.
+                    //                     D
+                    //         C
+                    //      A      B     E
+                    //         F      G
+                    //      H
+                    //
+                    // Would draw A -> C -> D -> E -> G -> H -> A
+                    //
+                    // This may not be what everyone wants so if there is a series order specified we will just join
+                    // the points in that order instead.  This will not allow users to skip points and therefore not achieve
+                    // the default behaviour explicitly.
+                    if (series._orderRules && series._orderRules.length > 0) {
+                        finalPointArray = points.concat(points[0]);
+                    } else {
+                        // Find the leftmost point
+                        points = points.sort(sortByX);
+                        finalPointArray.push(points[0]);
+                        lastAngle = 0;
+                        // Iterate until the first and last points match
+                        do {
+                            lastAngle = addNextPoint(points, finalPointArray, lastAngle);
+                        } while (finalPointArray.length <= points.length && (finalPointArray[0].x !== finalPointArray[finalPointArray.length - 1].x || finalPointArray[0].y !== finalPointArray[finalPointArray.length - 1].y));
+                    }
+                }
+
+                // Reverse the base points so that they are in the correct order for the path
+                basePoints = basePoints.reverse();
+
+                // Get the points that this area will appear
+                p = getArea(interpolation, "_previousOrigin")(finalPointArray);
+                b = getArea((interpolation === "step-after" ? "step-before" : (interpolation === "step-before" ? "step-after" : interpolation)), "_previousOrigin")(basePoints);
+                l = getArea("linear", "_previousOrigin")(finalPointArray);
+                areaData[i].entry = p + (b && b.length > 0 ? "L" + b.substring(1) : "") + (l && l.length > 0 ? "L" + l.substring(1, l.indexOf("L")) : 0);
+
+                p = getArea(interpolation)(finalPointArray);
+                b = getArea(interpolation === "step-after" ? "step-before" : (interpolation === "step-before" ? "step-after" : interpolation))(basePoints);
+                l = getArea("linear")(finalPointArray);
+                areaData[i].update = p + (b && b.length > 0 ? "L" + b.substring(1) : "") + (l && l.length > 0 ? "L" + l.substring(1, l.indexOf("L")) : 0);
+
+                p = getArea(interpolation, "_origin")(finalPointArray);
+                b = getArea((interpolation === "step-after" ? "step-before" : (interpolation === "step-before" ? "step-after" : interpolation)), "_origin")(basePoints);
+                l = getArea("linear", "_origin")(finalPointArray);
+                areaData[i].exit = p + (b && b.length > 0 ? "L" + b.substring(1) : "") + (l && l.length > 0 ? "L" + l.substring(1, l.indexOf("L")) : 0);
+
+                // Add the color in this loop, it can't be done during initialisation of the row because
+                // the areas should be ordered first (to ensure standard distribution of colors
+                areaData[i].color = chart.getColor(areaData[i].key.length > 0 ? areaData[i].key[areaData[i].key.length - 1] : "All");
+
+            }
 
             if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
                 chart._tooltipGroup.remove();
             }
-
-            // If there is a category axis we should draw a line for each aggField.  Otherwise
-            // the first aggField defines the points and the others define the line
-            if (series.x._hasCategories() || series.y._hasCategories()) {
-                firstAgg = 0;
-            }
-            data.forEach(function (d) {
-                var filter = [],
-                    match = false,
-                    k;
-                for (k = firstAgg; k < d.aggField.length; k += 1) {
-                    filter.push(d.aggField[k]);
-                }
-                uniqueValues.forEach(function (e) {
-                    match = match || (e === filter.join("/"));
-                }, this);
-                if (!match) {
-                    uniqueValues.push(filter.join("/"));
-                }
-            }, this);
-
-            if (series.c !== null && series.c !== undefined && ((series.x._hasCategories() && series.y._hasMeasure()) || (series.y._hasCategories() && series.x._hasMeasure()))) {
-                graded = true;
-                uniqueValues.forEach(function (seriesValue) {
-                    dimple._addGradient(seriesValue, "fill-area-gradient-" + seriesValue.join("_").replace(" ", ""), (series.x._hasCategories() ? series.x : series.y), data, chart, duration, "fill");
-                    dimple._addGradient(seriesValue, "stroke-area-gradient-" + seriesValue.join("_").replace(" ", ""), (series.x._hasCategories() ? series.x : series.y), data, chart, duration, "stroke");
-                }, this);
-            }
-
-            line = d3.svg.line()
-                    .x(function (d) { return dimple._helpers.cx(d, chart, series); })
-                    .y(function (d) { return dimple._helpers.cy(d, chart, series); });
 
             if (series.shapes === null || series.shapes === undefined) {
-                series.shapes = chart._group.selectAll(".area")
-                    .data(uniqueValues)
-                    .enter()
-                        .append("svg:path")
-                        .attr("opacity", function(d) { return chart.getColor(d).opacity; });
+                theseShapes = chart._group.selectAll("." + className).data(areaData);
+            } else {
+                theseShapes = series.shapes.data(areaData, function (d) { return d.key; });
             }
 
-            series.shapes
-                .data(uniqueValues)
-                .transition()
-                .duration(duration)
-                .attr("class", function (d) { return "series area " + d.split(" ").join("_"); })
-                .attr("d", function (d) {
-                    var seriesData,
-                        baseline = [],
-                        max = 0,
-                        row,
-                        newObj,
-                        j,
-                        k,
-                        m,
-                        q,
-                        r;
-                    seriesData = dimple.filterData(data, "aggField", d);
-                    seriesData.sort(function (a, b) {
-                        var sortValue = 0;
-                        if (series.x._hasCategories()) {
-                            sortValue = (dimple._helpers.cx(a, chart, series) < dimple._helpers.cx(b, chart, series) ? -1 : 1);
-                        } else if (series.y._hasCategories()) {
-                            sortValue = (dimple._helpers.cy(a, chart, series) < dimple._helpers.cy(b, chart, series) ? -1 : 1);
-                        }
-                        return sortValue;
-                    });
-                    for (j = seriesData.length - 1; j >= 0; j -= 1) {
-                        row = seriesData[j];
-                        newObj = { cx: 0, cy: 0, height: 0, width: 0, xOffset: 0, yOffset: 0 };
-                        if (series.x._hasCategories()) {
-                            // Fix the x properties
-                            newObj.cx = row.cx;
-                            newObj.width = row.width;
-                            newObj.xOffset = row.xOffset;
-                            // Find the largest value for the xField less than this value
-                            if (catPoints[row.xField] === undefined) {
-                                catPoints[row.xField] = [];
-                            } else {
-                                max = 0;
-                                for (k = 0; k <= catPoints[row.xField].length; k += 1) {
-                                    q = catPoints[row.xField][k];
-                                    if ((row.cy >= 0 && q >= 0) || (row.cy <= 0 && q <= 0)) {
-                                        if (Math.abs(q) <= Math.abs(row.cy) && Math.abs(q) > Math.abs(max)) {
-                                            max = q;
-                                        }
-                                    }
-                                }
-                                newObj.cy = max;
-                            }
-                            baseline.push(newObj);
-                            catPoints[row.xField].push(row.cy);
-                        } else if (series.y._hasCategories()) {
-                            // Fix the y properties
-                            newObj.cy = row.cy;
-                            newObj.height = row.height;
-                            newObj.yOffset = row.yOffset;
-                            // Find the largest value for the xField less than this value
-                            if (catPoints[row.yField] === undefined) {
-                                catPoints[row.yField] = [];
-                            } else {
-                                max = 0;
-                                for (m = 0; m <= catPoints[row.yField].length; m += 1) {
-                                    r = catPoints[row.yField][m];
-                                    if ((row.cx >= 0 && r >= 0) || (row.cx <= 0 && r <= 0)) {
-                                        if (Math.abs(r) <= Math.abs(row.cx) && Math.abs(r) > Math.abs(max)) {
-                                            max = r;
-                                        }
-                                    }
-                                }
-                                newObj.cx = max;
-                            }
-                            baseline.push(newObj);
-                            catPoints[row.yField].push(row.cx);
-                        }
-                    }
-                    //return line(startPoint.concat(seriesData).concat(endPoint));
-                    return line(seriesData.concat(baseline).concat(seriesData[0]));
-                })
+            // Add
+            theseShapes
+                .enter()
+                .append("path")
+                .attr("id", function (d) { return d.key; })
+                .attr("class", function (d) { return className + " dimple-line " + d.keyString; })
+                .attr("d", function (d) { return d.entry; })
                 .call(function () {
+                    // Apply formats optionally
                     if (!chart.noFormats) {
-                        this.attr("fill", function (d) { return (graded ? "url(#fill-area-gradient-" + d.join("_").replace(" ", "") + ")" : chart.getColor(d).fill); })
-                            .attr("stroke", function (d) { return (graded ? "url(#stroke-area-gradient-" + d.join("_").replace(" ", "") + ")" : chart.getColor(d).stroke); })
+                        this.attr("opacity", function (d) { return (graded ? 1 : d.color.opacity); })
+                            .attr("fill", function (d) { return (graded ? "url(#fill-area-gradient-" + d.keyString + ")" : d.color.fill); })
+                            .attr("stroke", function (d) { return (graded ? "url(#stroke-area-gradient-" + d.keyString + ")" : d.color.stroke); })
                             .attr("stroke-width", series.lineWeight);
                     }
-                });
-
-            if (series.lineMarkers) {
-                if (series._markerBacks === null || series._markerBacks === undefined) {
-                    markerBacks = chart._group.selectAll(".markerBacks").data(data);
-                } else {
-                    markerBacks = series._markerBacks.data(data, function (d) { return d.key; });
-                }
-                // Add
-                markerBacks
-                    .enter()
-                    .append("circle")
-                    .attr("id", function (d) { return d.key; })
-                    .attr("class", "markerBacks")
-                    .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                    .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                    .attr("r", 0)
-                    .attr("fill", "white")
-                    .attr("stroke", "none");
-
-                // Update
-                markerBacks
-                    .transition().duration(duration)
-                    .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                    .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                    .attr("r", 2 + series.lineWeight);
-                // Remove
-                markerBacks
-                    .exit()
-                    .transition().duration(duration)
-                    .attr("r", 0)
-                    .each("end", function () {
-                        d3.select(this).remove();
-                    });
-                series._markerBacks = markerBacks;
-            }
-
-            // Deal with markers in the same way as main series to fix #28
-            if (series._markers === null || series._markers === undefined) {
-                markers = chart._group.selectAll(".markers").data(data);
-            } else {
-                markers = series._markers.data(data, function (d) { return d.key; });
-            }
-
-
-            // Add the actual marker. We need to do this even if we aren't displaying them because they
-            // catch hover events
-            markers
-                .enter()
-                .append("circle")
-                .attr("id", function (d) { return d.key; })
-                .attr("class", "markers")
-                .on("mouseover", function (e) {
-                    self.enterEventHandler(e, this, chart, series);
                 })
-                .on("mouseleave", function (e) {
-                    self.leaveEventHandler(e, this, chart, series);
-                })
-                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                .attr("r", 0)
-                .attr("opacity", function (d) { return (series.lineMarkers ? chart.getColor(d).opacity : 0); })
-                .call(function () {
-                    if (!chart.noFormats) {
-                        this.attr("fill", "white")
-                            .style("stroke-width", series.lineWeight)
-                            .attr("stroke", function (d) {
-                                return (graded ? dimple._helpers.fill(d, chart, series) : chart.getColor(d.aggField[d.aggField.length - 1]).stroke);
-                            });
-                    }
+                .each(function (d) {
+                    // Pass line data to markers
+                    d.markerData = d.data;
+                    drawMarkers(d);
                 });
 
-            markers
-                .transition().duration(duration)
-                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                .attr("r", 2 + series.lineWeight)
-                .call(function () {
-                    if (!chart.noFormats) {
-                        this.attr("fill", "white")
-                            .style("stroke-width", series.lineWeight)
-                            .attr("stroke", function (d) {
-                                return (graded ? dimple._helpers.fill(d, chart, series) : chart.getColor(d.aggField[d.aggField.length - 1]).stroke);
-                            });
-                    }
+            // Update
+            updated = chart._handleTransition(theseShapes, duration, chart)
+                .attr("d", function (d) { return d.update; })
+                .each(function (d) {
+                    // Pass line data to markers
+                    d.markerData = d.data;
+                    drawMarkers(d);
                 });
 
-            markers
-                .exit()
-                .transition().duration(duration)
-                .attr("r", 0)
-                .each("end", function () {
-                    d3.select(this).remove();
+            // Remove
+            removed = chart._handleTransition(theseShapes.exit(), duration, chart)
+                .attr("d", function (d) { return d.exit; })
+                .each(function (d) {
+                    // Using all data for the markers fails because there are no exits in the markers
+                    // only the whole line, therefore we need to clear the points here
+                    d.markerData = [];
+                    drawMarkers(d);
                 });
+
+            dimple._postDrawHandling(series, updated, removed, duration);
 
             // Save the shapes to the series array
-            series._markers = markers;
-        },
+            series.shapes = theseShapes;
 
-        // Handle the mouse enter event
-        enterEventHandler: function (e, shape, chart, series) {
-
-            // The margin between the text and the box
-            var textMargin = 5,
-                // The margin between the ring and the popup
-                popupMargin = 10,
-                // The popup animation duration in ms
-                animDuration = 750,
-                // Collect some facts about the highlighted bubble
-                selectedShape = d3.select(shape),
-                cx = parseFloat(selectedShape.attr("cx")),
-                cy = parseFloat(selectedShape.attr("cy")),
-                r = parseFloat(selectedShape.attr("r")),
-                opacity = dimple._helpers.opacity(e, chart, series),
-                fill = dimple._helpers.fill(e, chart, series),
-                dropDest = series._dropLineOrigin(),
-                // Fade the popup stroke mixing the shape fill with 60% white
-                popupStrokeColor = d3.rgb(
-                    d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
-                ),
-                // Fade the popup fill mixing the shape fill with 80% white
-                popupFillColor = d3.rgb(
-                    d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
-                ),
-                t,
-                y = 0,
-                w = 0,
-                h = 0,
-                box,
-                overlap,
-                rows = [];
-
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-            chart._tooltipGroup = chart.svg.append("g");
-
-            // On hover make the line marker visible immediately
-            selectedShape.style("opacity", 1);
-            // Add a ring around the data point
-            chart._tooltipGroup.append("circle")
-                .attr("cx", cx)
-                .attr("cy", cy)
-                .attr("r", r)
-                .attr("opacity", 0)
-                .style("fill", "none")
-                .style("stroke", fill)
-                .style("stroke-width", 1)
-                .transition()
-                .duration(animDuration / 2)
-                .ease("linear")
-                    .attr("opacity", 1)
-                    .attr("r", r + 4)
-                    .style("stroke-width", 2);
-
-            // Add a drop line to the x axis
-            if (dropDest.y !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", cx)
-                    .attr("y1", (cy < dropDest.y ? cy + r + 4 : cy - r - 4))
-                    .attr("x2", cx)
-                    .attr("y2", (cy < dropDest.y ? cy + r + 4 : cy - r - 4))
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                        // Added 1px offset to cater for svg issue where a transparent
-                        // group overlapping a line can sometimes hide it in some browsers
-                        // Issue #10
-                        .attr("y2", (cy < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
-            }
-
-            // Add a drop line to the y axis
-            if (dropDest.x !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", (cx < dropDest.x ? cx + r + 4 : cx - r - 4))
-                    .attr("y1", cy)
-                    .attr("x2", (cx < dropDest.x ? cx + r + 4 : cx - r - 4))
-                    .attr("y2", cy)
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                        // Added 1px offset to cater for svg issue where a transparent
-                        // group overlapping a line can sometimes hide it in some browsers
-                        // Issue #10
-                        .attr("x2", (cx < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
-            }
-
-            // Add a group for text
-            t = chart._tooltipGroup.append("g");
-            // Create a box for the popup in the text group
-            box = t.append("rect")
-                .attr("class", "tooltip");
-
-            // Add the series categories
-            if (series.categoryFields !== null && series.categoryFields !== undefined && series.categoryFields.length > 0) {
-                series.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.aggField[i] !== c ? ": " + e.aggField[i] : ""));
-                }, this);
-            }
-
-            if (series.x._hasTimeField()) {
-                rows.push(series.x.timeField + ": " + series.x._getFormat()(e.xField[0]));
-            } else if (series.x._hasCategories()) {
-                // Add the x axis categories
-                series.x.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.xField[i] !== c ? ": " + e.xField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.x.measure + ": " + series.x._getFormat()(e.width));
-            }
-
-            if (series.y._hasTimeField()) {
-                rows.push(series.y.timeField + ": " + series.y._getFormat()(e.yField[0]));
-            } else if (series.y._hasCategories()) {
-                // Add the y axis categories
-                series.y.categoryFields.forEach(function (c, i) {
-                    rows.push(c + (e.yField[i] !== c ? ": " + e.yField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.y.measure + ": " + series.y._getFormat()(e.height));
-            }
-
-            if (series.z !== null && series.z !== undefined) {
-                // Add the axis measure value
-                rows.push(series.z.measure + ": " + series.z._getFormat()(e.zValue));
-            }
-
-            if (series.c !== null && series.c !== undefined) {
-                // Add the axis measure value
-                rows.push(series.c.measure + ": " + series.c._getFormat()(e.cValue));
-            }
-
-            // Get distinct text rows to deal with cases where 2 axes have the same dimensionality
-            rows = rows.filter(function(elem, pos) {
-                return rows.indexOf(elem) === pos;
-            });
-
-            // Create a text object for every row in the popup
-            t.selectAll(".textHoverShapes").data(rows).enter()
-                .append("text")
-                    .attr("class", "tooltip")
-                    .text(function (d) { return d; })
-                    .style("font-family", "sans-serif")
-                    .style("font-size", "10px");
-
-            // Get the max height and width of the text items
-            t.each(function () {
-                w = (this.getBBox().width > w ? this.getBBox().width : w);
-                h = (this.getBBox().width > h ? this.getBBox().height : h);
-            });
-
-            // Position the text relatve to the bubble, the absolute positioning
-            // will be done by translating the group
-            t.selectAll("text")
-                .attr("x", 0)
-                .attr("y", function () {
-                    // Increment the y position
-                    y += this.getBBox().height;
-                    // Position the text at the centre point
-                    return y - (this.getBBox().height / 2);
-                });
-
-            // Draw the box with a margin around the text
-            box.attr("x", -textMargin)
-                .attr("y", -textMargin)
-                .attr("height", Math.floor(y + textMargin) - 0.5)
-                .attr("width", w + 2 * textMargin)
-                .attr("rx", 5)
-                .attr("ry", 5)
-                .style("fill", popupFillColor)
-                .style("stroke", popupStrokeColor)
-                .style("stroke-width", 2)
-                .style("opacity", 0.95);
-
-            // Shift the ring margin left or right depending on whether it will overlap the edge
-            overlap = cx + r + textMargin + popupMargin + w > parseFloat(chart.svg.node().getBBox().width);
-
-            // Translate the shapes to the x position of the bubble (the x position of the shapes is handled)
-            t.attr("transform", "translate(" +
-                   (overlap ? cx - (r + textMargin + popupMargin + w) : cx + r + textMargin + popupMargin) + " , " +
-                   (cy - ((y - (h - textMargin)) / 2)) +
-                ")");
-        },
-
-        // Handle the mouse leave event
-        leaveEventHandler: function (e, shape, chart, series) {
-            // Return the opacity of the marker
-            d3.select(shape).style("opacity", (series.lineMarkers ? dimple._helpers.opacity(e, chart, series) : 0));
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
         }
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/plot/bar.js
     dimple.plot.bar = {
@@ -2786,26 +3365,38 @@ window.dimple = dimple;
         // By default the bar series is stacked if there are series categories
         stacked: true,
 
+        // This is not a grouped plot meaning that one point is treated as one series value
+        grouped: false,
+
         // The axes which will affect the bar chart - not z
         supportedAxes: ["x", "y", "c"],
 
         // Draw the chart
         draw: function (chart, series, duration) {
 
-            // Get self pointer for inner functions
-            var self = this,
-                // Get the series data
-                chartData = series._positionData,
-                // If the series is uninitialised create placeholders, otherwise use the existing shapes
+            var chartData = series._positionData,
                 theseShapes = null,
-                className = "series" + chart.series.indexOf(series);
+                classes = ["dimple-series-" + chart.series.indexOf(series), "dimple-bar"],
+                updated,
+                removed,
+                xFloat = !series._isStacked() && series.x._hasMeasure(),
+                yFloat = !series._isStacked() && series.y._hasMeasure(),
+                cat = "none";
+
+            if (series.x._hasCategories() && series.y._hasCategories()) {
+                cat = "both";
+            } else if (series.x._hasCategories()) {
+                cat = "x";
+            } else if (series.y._hasCategories()) {
+                cat = "y";
+            }
 
             if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
                 chart._tooltipGroup.remove();
             }
 
             if (series.shapes === null || series.shapes === undefined) {
-                theseShapes = chart._group.selectAll("." + className).data(chartData);
+                theseShapes = chart._group.selectAll("." + classes.join(".")).data(chartData);
             } else {
                 theseShapes = series.shapes.data(chartData, function (d) { return d.key; });
             }
@@ -2816,22 +3407,35 @@ window.dimple = dimple;
                 .append("rect")
                 .attr("id", function (d) { return d.key; })
                 .attr("class", function (d) {
-                    return className + " bar " +
-                        d.aggField.join(" ").split(" ").join("_") + " " +
-                        d.xField.join(" ").split(" ").join("_") + " " +
-                        d.yField.join(" ").split(" ").join("_");
+                    var c = [];
+                    c = c.concat(d.aggField);
+                    c = c.concat(d.xField);
+                    c = c.concat(d.yField);
+                    return classes.join(" ") + " " + dimple._createClass(c);
                 })
-                .attr("x", function (d) { return dimple._helpers.x(d, chart, series); })
-                .attr("y", function (d) { return dimple._helpers.y(d, chart, series) + dimple._helpers.height(d, chart, series); })
-                .attr("width", function (d) {return (d.xField !== null && d.xField.length > 0 ? dimple._helpers.width(d, chart, series) : 0); })
-                .attr("height", function (d) {return (d.yField !== null && d.yField.length > 0 ? dimple._helpers.height(d, chart, series) : 0); })
+                .attr("x", function (d) {
+                    var returnValue = series.x._previousOrigin;
+                    if (cat === "x") {
+                        returnValue = dimple._helpers.x(d, chart, series);
+                    } else if (cat === "both") {
+                        returnValue = dimple._helpers.cx(d, chart, series);
+                    }
+                    return returnValue;
+                })
+                .attr("y", function (d) {
+                    var returnValue = series.y._previousOrigin;
+                    if (cat === "y") {
+                        returnValue = dimple._helpers.y(d, chart, series);
+                    } else if (cat === "both") {
+                        returnValue = dimple._helpers.cy(d, chart, series);
+                    }
+                    return returnValue;
+                })
+                .attr("width", function (d) { return (cat === "x" ?  dimple._helpers.width(d, chart, series) : 0); })
+                .attr("height", function (d) { return (cat === "y" ?  dimple._helpers.height(d, chart, series) : 0); })
                 .attr("opacity", function (d) { return dimple._helpers.opacity(d, chart, series); })
-                .on("mouseover", function (e) {
-                    self.enterEventHandler(e, this, chart, series);
-                })
-                .on("mouseleave", function () {
-                    self.leaveEventHandler(chart);
-                })
+                .on("mouseover", function (e) { dimple._showBarTooltip(e, this, chart, series); })
+                .on("mouseleave", function (e) { dimple._removeTooltip(e, this, chart, series); })
                 .call(function () {
                     if (!chart.noFormats) {
                         this.attr("fill", function (d) { return dimple._helpers.fill(d, chart, series); })
@@ -2840,12 +3444,11 @@ window.dimple = dimple;
                 });
 
             // Update
-            theseShapes
-                .transition().duration(duration)
-                .attr("x", function (d) { return dimple._helpers.x(d, chart, series); })
-                .attr("y", function (d) { return dimple._helpers.y(d, chart, series); })
-                .attr("width", function (d) { return dimple._helpers.width(d, chart, series); })
-                .attr("height", function (d) { return dimple._helpers.height(d, chart, series); })
+            updated = chart._handleTransition(theseShapes, duration, chart, series)
+                .attr("x", function (d) { return xFloat ? dimple._helpers.cx(d, chart, series) - series.x.floatingBarWidth / 2 : dimple._helpers.x(d, chart, series); })
+                .attr("y", function (d) { return yFloat ? dimple._helpers.cy(d, chart, series) - series.y.floatingBarWidth / 2 : dimple._helpers.y(d, chart, series); })
+                .attr("width", function (d) { return (xFloat ? series.x.floatingBarWidth : dimple._helpers.width(d, chart, series)); })
+                .attr("height", function (d) { return (yFloat ? series.y.floatingBarWidth : dimple._helpers.height(d, chart, series)); })
                 .call(function () {
                     if (!chart.noFormats) {
                         this.attr("fill", function (d) { return dimple._helpers.fill(d, chart, series); })
@@ -2854,238 +3457,37 @@ window.dimple = dimple;
                 });
 
             // Remove
-            theseShapes
-                .exit()
-                .transition().duration(duration)
-                .attr("x", function (d) { return dimple._helpers.x(d, chart, series); })
-                .attr("y", function (d) { return dimple._helpers.y(d, chart, series); })
-                .attr("width", function (d) { return dimple._helpers.width(d, chart, series); })
-                .attr("height", function (d) { return dimple._helpers.height(d, chart, series); })
-                .each("end", function () {
-                    d3.select(this).remove();
-                });
+            removed = chart._handleTransition(theseShapes.exit(), duration, chart, series)
+                .attr("x", function (d) {
+                    var returnValue = series.x._origin;
+                    if (cat === "x") {
+                        returnValue = dimple._helpers.x(d, chart, series);
+                    } else if (cat === "both") {
+                        returnValue = dimple._helpers.cx(d, chart, series);
+                    }
+                    return returnValue;
+                })
+                .attr("y", function (d) {
+                    var returnValue = series.y._origin;
+                    if (cat === "y") {
+                        returnValue = dimple._helpers.y(d, chart, series);
+                    } else if (cat === "both") {
+                        returnValue = dimple._helpers.cy(d, chart, series);
+                    }
+                    return returnValue;
+                })
+                .attr("width", function (d) { return (cat === "x" ?  dimple._helpers.width(d, chart, series) : 0); })
+                .attr("height", function (d) { return (cat === "y" ?  dimple._helpers.height(d, chart, series) : 0); });
+
+            dimple._postDrawHandling(series, updated, removed, duration);
 
             // Save the shapes to the series array
             series.shapes = theseShapes;
-        },
-
-        // Handle the mouse enter event
-        enterEventHandler: function (e, shape, chart, series) {
-
-            // The margin between the text and the box
-            var textMargin = 5,
-                // The margin between the ring and the popup
-                popupMargin = 10,
-                // The popup animation duration in ms
-                animDuration = 750,
-                // Collect some facts about the highlighted bubble
-                selectedShape = d3.select(shape),
-                x = parseFloat(selectedShape.attr("x")),
-                y = parseFloat(selectedShape.attr("y")),
-                width = parseFloat(selectedShape.attr("width")),
-                height = parseFloat(selectedShape.attr("height")),
-                opacity = selectedShape.attr("opacity"),
-                fill = selectedShape.attr("fill"),
-                dropDest = series._dropLineOrigin(),
-                // Fade the popup stroke mixing the shape fill with 60% white
-                popupStrokeColor = d3.rgb(
-                    d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
-                ),
-                // Fade the popup fill mixing the shape fill with 80% white
-                popupFillColor = d3.rgb(
-                    d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
-                ),
-                t,
-                box,
-                rows = [],
-                // The running y value for the text elements
-                yRunning = 0,
-                // The maximum bounds of the text elements
-                w = 0,
-                h = 0,
-                // Values to shift the popup
-                translateX,
-                translateY;
-
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-            chart._tooltipGroup = chart.svg.append("g");
-
-            // Add a drop line to the x axis
-            if (!series.x._hasCategories() && dropDest.y !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", (x < series.x._origin ? x + 1 : x + width - 1))
-                    .attr("y1", (y < dropDest.y ? y + height : y))
-                    .attr("x2", (x < series.x._origin ? x + 1 : x + width - 1))
-                    .attr("y2", (y < dropDest.y ? y + height : y))
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                        // Added 1px offset to cater for svg issue where a transparent
-                        // group overlapping a line can sometimes hide it in some browsers
-                        // Issue #10
-                        .attr("y2", (y < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
-            }
-
-            // Add a drop line to the y axis
-            if (!series.y._hasCategories() && dropDest.x !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", (x < dropDest.x ? x + width : x))
-                    .attr("y1", (y < series.y._origin ? y + 1 : y + height - 1))
-                    .attr("x2", (x < dropDest.x ? x + width : x))
-                    .attr("y2", (y < series.y._origin ? y + 1 : y + height - 1))
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                        // Added 1px offset to cater for svg issue where a transparent
-                        // group overlapping a line can sometimes hide it in some browsers
-                        // Issue #10
-                        .attr("x2", (x < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
-            }
-
-            // Add a group for text
-            t = chart._tooltipGroup.append("g");
-            // Create a box for the popup in the text group
-            box = t.append("rect")
-                .attr("class", "tooltip");
-
-            // Add the series categories
-            if (series.categoryFields !== null && series.categoryFields !== undefined && series.categoryFields.length > 0) {
-                series.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.aggField[i] !== c ? ": " + e.aggField[i] : ""));
-                }, this);
-            }
-
-            if (series.x._hasTimeField()) {
-                rows.push(series.x.timeField + ": " + series.x._getFormat()(e.xField[0]));
-            } else if (series.x._hasCategories()) {
-                // Add the x axis categories
-                series.x.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.xField[i] !== c ? ": " + e.xField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.x.measure + ": " + series.x._getFormat()(e.width));
-            }
-
-            if (series.y._hasTimeField()) {
-                rows.push(series.y.timeField + ": " + series.y._getFormat()(e.yField[0]));
-            } else if (series.y._hasCategories()) {
-                // Add the y axis categories
-                series.y.categoryFields.forEach(function (c, i) {
-                    rows.push(c + (e.yField[i] !== c ? ": " + e.yField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.y.measure + ": " + series.y._getFormat()(e.height));
-            }
-
-            if (series.c !== null && series.c !== undefined) {
-                // Add the axis measure value
-                rows.push(series.c.measure + ": " + series.c._getFormat()(series.c.showPercent ? e.cPct : e.cValue));
-            }
-
-            // Get distinct text rows to deal with cases where 2 axes have the same dimensionality
-            rows = rows.filter(function(elem, pos) {
-                return rows.indexOf(elem) === pos;
-            });
-
-            // Create a text object for every row in the popup
-            t.selectAll(".textHoverShapes").data(rows).enter()
-                .append("text")
-                    .attr("class", "tooltip")
-                    .text(function (d) { return d; })
-                    .style("font-family", "sans-serif")
-                    .style("font-size", "10px");
-
-            // Get the max height and width of the text items
-            t.each(function () {
-                w = (this.getBBox().width > w ? this.getBBox().width : w);
-                h = (this.getBBox().width > h ? this.getBBox().height : h);
-            });
-
-            // Position the text relatve to the bubble, the absolute positioning
-            // will be done by translating the group
-            t.selectAll("text")
-                .attr("x", 0)
-                .attr("y", function () {
-                    // Increment the y position
-                    yRunning += this.getBBox().height;
-                    // Position the text at the centre point
-                    return yRunning - (this.getBBox().height / 2);
-                });
-
-            // Draw the box with a margin around the text
-            box.attr("x", -textMargin)
-                .attr("y", -textMargin)
-                .attr("height", Math.floor(yRunning + textMargin) - 0.5)
-                .attr("width", w + 2 * textMargin)
-                .attr("rx", 5)
-                .attr("ry", 5)
-                .style("fill", popupFillColor)
-                .style("stroke", popupStrokeColor)
-                .style("stroke-width", 2)
-                .style("opacity", 0.95);
-
-            // Shift the popup around to avoid overlapping the svg edge
-            if (x + width + textMargin + popupMargin + w < parseFloat(chart.svg.node().getBBox().width)) {
-                // Draw centre right
-                translateX = (x + width + textMargin + popupMargin);
-                translateY = (y + (height / 2) - ((yRunning - (h - textMargin)) / 2));
-                t.attr("transform", "translate(" + translateX + " , " + translateY + ")");
-            } else if (x - (textMargin + popupMargin + w) > 0) {
-                // Draw centre left
-                translateX = (x - (textMargin + popupMargin + w));
-                translateY = (y + (height / 2) - ((yRunning - (h - textMargin)) / 2));
-                t.attr("transform", "translate(" + translateX + " , " + translateY + ")");
-            } else if (y + height + yRunning + popupMargin + textMargin < parseFloat(chart.svg.node().getBBox().height)) {
-                // Draw centre below
-                translateX = (x + (width / 2) - (2 * textMargin + w) / 2);
-                translateY = (y + height + 2 * textMargin);
-                t.attr("transform", "translate(" +
-                    (translateX > 0 ? translateX : popupMargin) + " , " +
-                    translateY +
-                    ")");
-            } else {
-                // Draw centre above
-                translateX = (x + (width / 2) - (2 * textMargin + w) / 2);
-                translateY = (y - yRunning - (h - textMargin));
-                t.attr("transform", "translate(" +
-                    (translateX > 0 ? translateX : popupMargin) + " , " +
-                    translateY +
-                    ")");
-            }
-        },
-
-        // Handle the mouse leave event
-        leaveEventHandler: function (chart) {
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
         }
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/plot/bubble.js
     dimple.plot.bubble = {
@@ -3093,26 +3495,437 @@ window.dimple = dimple;
         // By default the bubble values are not stacked
         stacked: false,
 
+        // This is not a grouped plot meaning that one point is treated as one series value
+        grouped: false,
+
         // The axis positions affecting the bubble series
         supportedAxes: ["x", "y", "z", "c"],
 
         // Draw the axis
         draw: function (chart, series, duration) {
 
-            // Get self pointer for inner functions
-            var self = this,
-                // Get the series data
-                chartData = series._positionData,
-                // If the series is uninitialised create placeholders, otherwise use the existing shapes
+            var chartData = series._positionData,
                 theseShapes = null,
-                className = "series" + chart.series.indexOf(series);
+                classes = ["dimple-series-" + chart.series.indexOf(series), "dimple-bubble"],
+                updated,
+                removed;
 
             if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
                 chart._tooltipGroup.remove();
             }
 
             if (series.shapes === null || series.shapes === undefined) {
-                theseShapes = chart._group.selectAll("." + className).data(chartData);
+                theseShapes = chart._group.selectAll("." + classes.join(".")).data(chartData);
+            } else {
+                theseShapes = series.shapes.data(chartData, function (d) {
+                    return d.key;
+                });
+            }
+
+            // Add
+            theseShapes
+                .enter()
+                .append("circle")
+                .attr("id", function (d) {
+                    return d.key;
+                })
+                .attr("class", function (d) {
+                    var c = [];
+                    c = c.concat(d.aggField);
+                    c = c.concat(d.xField);
+                    c = c.concat(d.yField);
+                    c = c.concat(d.zField);
+                    return classes.join(" ") + " " + dimple._createClass(c);
+                })
+                .attr("cx", function (d) {
+                    return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._previousOrigin);
+                })
+                .attr("cy", function (d) {
+                    return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._previousOrigin);
+                })
+                .attr("r", 0)
+                .attr("opacity", function (d) {
+                    return dimple._helpers.opacity(d, chart, series);
+                })
+                .on("mouseover", function (e) {
+                    dimple._showPointTooltip(e, this, chart, series);
+                })
+                .on("mouseleave", function (e) {
+                    dimple._removeTooltip(e, this, chart, series);
+                })
+                .call(function () {
+                    if (!chart.noFormats) {
+                        this.attr("fill", function (d) {
+                            return dimple._helpers.fill(d, chart, series);
+                        })
+                            .attr("stroke", function (d) {
+                                return dimple._helpers.stroke(d, chart, series);
+                            });
+                    }
+                });
+
+            // Update
+            updated = chart._handleTransition(theseShapes, duration, chart, series)
+                .attr("cx", function (d) {
+                    return dimple._helpers.cx(d, chart, series);
+                })
+                .attr("cy", function (d) {
+                    return dimple._helpers.cy(d, chart, series);
+                })
+                .attr("r", function (d) {
+                    return dimple._helpers.r(d, chart, series);
+                })
+                .call(function () {
+                    if (!chart.noFormats) {
+                        this.attr("fill", function (d) {
+                            return dimple._helpers.fill(d, chart, series);
+                        })
+                            .attr("stroke", function (d) {
+                                return dimple._helpers.stroke(d, chart, series);
+                            });
+                    }
+                });
+
+            // Remove
+            removed = chart._handleTransition(theseShapes.exit(), duration, chart, series)
+                .attr("r", 0)
+                .attr("cx", function (d) {
+                    return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._origin);
+                })
+                .attr("cy", function (d) {
+                    return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._origin);
+                });
+
+            dimple._postDrawHandling(series, updated, removed, duration);
+
+            // Save the shapes to the series array
+            series.shapes = theseShapes;
+        }
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/objects/plot/line.js
+    dimple.plot.line = {
+
+        // By default the values are not stacked
+        stacked: false,
+
+        // This is a grouped plot meaning many points are treated as one series value
+        grouped: true,
+
+        // The axis positions affecting the line series
+        supportedAxes: ["x", "y", "c"],
+
+        // Draw the axis
+        draw: function (chart, series, duration) {
+            // Get the position data
+            var data = series._positionData,
+                lineData = [],
+                theseShapes = null,
+                className = "dimple-series-" + chart.series.indexOf(series),
+                firstAgg = (series.x._hasCategories() || series.y._hasCategories() ? 0 : 1),
+                interpolation,
+                graded = false,
+                i,
+                j,
+                k,
+                key,
+                keyString,
+                rowIndex,
+                updated,
+                removed,
+                orderedSeriesArray,
+                onEnter = function () {
+                    return function (e, shape, chart, series) {
+                        d3.select(shape).style("opacity", 1);
+                        dimple._showPointTooltip(e, shape, chart, series);
+                    };
+                },
+                onLeave = function (lineData) {
+                    return function (e, shape, chart, series) {
+                        d3.select(shape).style("opacity", (series.lineMarkers || lineData.data.length < 2 ? dimple._helpers.opacity(e, chart, series) : 0));
+                        dimple._removeTooltip(e, shape, chart, series);
+                    };
+                },
+                drawMarkers = function (d) {
+                    dimple._drawMarkers(d, chart, series, duration, className, graded, onEnter(d), onLeave(d));
+                },
+                coord = function (position, datum) {
+                    var val;
+                    if (series.interpolation === "step" && series[position]._hasCategories()) {
+                        series.barGap = 0;
+                        series.clusterBarGap = 0;
+                        val = dimple._helpers[position](datum, chart, series) + (position === "y" ? dimple._helpers.height(datum, chart, series) : 0);
+                    } else {
+                        val = dimple._helpers["c" + position](datum, chart, series);
+                    }
+                    // Remove long decimals from the coordinates as this fills the dom up with noise and makes matching below less likely to work.  It
+                    // shouldn't really matter but positioning to < 0.1 pixel is pretty pointless anyway.
+                    return parseFloat(val.toFixed(1));
+                },
+                getLine = function (inter, originProperty) {
+                    return d3.svg.line()
+                        .x(function (d) { return (series.x._hasCategories() || !originProperty ? d.x : series.x[originProperty]); })
+                        .y(function (d) { return (series.y._hasCategories() || !originProperty ? d.y : series.y[originProperty]); })
+                        .interpolate(inter);
+                };
+
+            // Handle the special interpolation handling for step
+            interpolation =  (series.interpolation === "step" ? "step-after" : series.interpolation);
+
+            // Get the array of ordered values
+            orderedSeriesArray = dimple._getSeriesOrder(series.data || chart.data, series);
+
+            if (series.c && ((series.x._hasCategories() && series.y._hasMeasure()) || (series.y._hasCategories() && series.x._hasMeasure()))) {
+                graded = true;
+            }
+
+            // Create a set of line data grouped by the aggregation field
+            for (i = 0; i < data.length; i += 1) {
+                key = [];
+                rowIndex = -1;
+                // Skip the first category unless there is a category axis on x or y
+                for (k = firstAgg; k < data[i].aggField.length; k += 1) {
+                    key.push(data[i].aggField[k]);
+                }
+                // Find the corresponding row in the lineData
+                keyString = dimple._createClass(key);
+                for (k = 0; k < lineData.length; k += 1) {
+                    if (lineData[k].keyString === keyString) {
+                        rowIndex = k;
+                        break;
+                    }
+                }
+                // Add a row to the line data if none was found
+                if (rowIndex === -1) {
+                    rowIndex = lineData.length;
+                    lineData.push({
+                        key: key,
+                        keyString: keyString,
+                        color: "white",
+                        data: [],
+                        markerData: [],
+                        points: [],
+                        line: {},
+                        entry: {},
+                        exit: {}
+                    });
+                }
+                // Add this row to the relevant data
+                lineData[rowIndex].data.push(data[i]);
+            }
+
+            // Sort the line data itself based on the order series array - this matters for stacked lines and default color
+            // consistency with colors usually awarded in terms of prominence
+            if (orderedSeriesArray) {
+                lineData.sort(function (a, b) {
+                    return dimple._arrayIndexCompare(orderedSeriesArray, a.key, b.key);
+                });
+            }
+
+            // Create a set of line data grouped by the aggregation field
+            for (i = 0; i < lineData.length; i += 1) {
+                // Sort the points so that lines are connected in the correct order
+                lineData[i].data.sort(dimple._getSeriesSortPredicate(chart, series, orderedSeriesArray));
+                // If this should have colour gradients, add them
+                if (graded) {
+                    dimple._addGradient(lineData[i].key, "fill-line-gradient-" + lineData[i].keyString, (series.x._hasCategories() ? series.x : series.y), data, chart, duration, "fill");
+                }
+
+                // Get points here, this is so that as well as drawing the line with them, we can also
+                // use them for the baseline
+                for (j = 0; j < lineData[i].data.length; j += 1) {
+                    lineData[i].points.push({
+                        x: coord("x", lineData[i].data[j]),
+                        y: coord("y", lineData[i].data[j])
+                    });
+                }
+                // If this is a step interpolation we need to add in some extra points to the category axis
+                // This is a little tricky but we need to add a new point duplicating the last category value.  In order
+                // to place the point we need to calculate the gap between the last x and the penultimate x and apply that
+                // gap again.
+                if (series.interpolation === "step" && lineData[i].points.length > 1) {
+                    if (series.x._hasCategories()) {
+                        lineData[i].points.push({
+                            x : 2 * lineData[i].points[lineData[i].points.length - 1].x - lineData[i].points[lineData[i].points.length - 2].x,
+                            y : lineData[i].points[lineData[i].points.length - 1].y
+                        });
+                    } else if (series.y._hasCategories()) {
+                        lineData[i].points = [{
+                            x : lineData[i].points[0].x,
+                            y : 2 * lineData[i].points[0].y - lineData[i].points[1].y
+                        }].concat(lineData[i].points);
+                    }
+                }
+
+                // Get the points that this line will appear
+                lineData[i].entry = getLine(interpolation, "_previousOrigin")(lineData[i].points);
+                lineData[i].update = getLine(interpolation)(lineData[i].points);
+                lineData[i].exit = getLine(interpolation, "_origin")(lineData[i].points);
+
+                // Add the color in this loop, it can't be done during initialisation of the row because
+                // the lines should be ordered first (to ensure standard distribution of colors
+                lineData[i].color = chart.getColor(lineData[i].key.length > 0 ? lineData[i].key[lineData[i].key.length - 1] : "All");
+            }
+
+            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
+                chart._tooltipGroup.remove();
+            }
+
+            if (series.shapes === null || series.shapes === undefined) {
+                theseShapes = chart._group.selectAll("." + className).data(lineData);
+            } else {
+                theseShapes = series.shapes.data(lineData, function (d) { return d.key; });
+            }
+
+            // Add
+            theseShapes
+                .enter()
+                .append("path")
+                .attr("id", function (d) { return d.key; })
+                .attr("class", function (d) {
+                    return className + " dimple-line " + d.keyString;
+                })
+                .attr("d", function (d) {
+                    return d.entry;
+                })
+                .call(function () {
+                    // Apply formats optionally
+                    if (!chart.noFormats) {
+                        this.attr("opacity", function (d) { return (graded ? 1 : d.color.opacity); })
+                            .attr("fill", "none")
+                            .attr("stroke", function (d) { return (graded ? "url(#fill-line-gradient-" + d.keyString + ")" : d.color.stroke); })
+                            .attr("stroke-width", series.lineWeight);
+                    }
+                })
+                .each(function (d) {
+                    // Pass line data to markers
+                    d.markerData = d.data;
+                    drawMarkers(d);
+                });
+
+            // Update
+            updated = chart._handleTransition(theseShapes, duration, chart)
+                .attr("d", function (d) { return d.update; })
+                .each(function (d) {
+                    // Pass line data to markers
+                    d.markerData = d.data;
+                    drawMarkers(d);
+                });
+
+            // Remove
+            removed = chart._handleTransition(theseShapes.exit(), duration, chart)
+                .attr("d", function (d) { return d.exit; })
+                .each(function (d) {
+                    // Using all data for the markers fails because there are no exits in the markers
+                    // only the whole line, therefore we need to clear the points here
+                    d.markerData = [];
+                    drawMarkers(d);
+                });
+
+            dimple._postDrawHandling(series, updated, removed, duration);
+
+            // Save the shapes to the series array
+            series.shapes = theseShapes;
+
+        }
+    };
+
+
+    dimple.plot.pie = {
+        // By default the bar series is stacked if there are series categories
+        stacked: false,
+        // This is not a grouped plot meaning that one point is treated as one series value
+        grouped: false,
+        // The axes which will affect the bar chart - not z
+        supportedAxes: ["x", "y", "c", "z", "p"],
+
+        // Draw the chart
+        draw: function (chart, series, duration) {
+
+            var chartData = series._positionData,
+                theseShapes = null,
+                classes = ["dimple-series-" + chart.series.indexOf(series), "dimple-pie"],
+                updated,
+                removed,
+                getOuterBase = function (d) {
+                    var oR;
+                    if (series.x && series.y) {
+                        oR = dimple._helpers.r(d, chart, series);
+                    } else {
+                        oR = chart._widthPixels() < chart._heightPixels() ? chart._widthPixels() / 2 : chart._heightPixels() / 2;
+                    }
+                    return oR;
+                },
+                getOuterRadius = function (d) {
+                    var oR = getOuterBase(d);
+                    if (series.outerRadius) {
+                        oR = dimple._parsePosition(series.outerRadius, oR);
+                    }
+                    return Math.max(oR, 0);
+                },
+                getInnerRadius = function (d) {
+                    var iR = 0;
+                    if (series.innerRadius) {
+                        iR = dimple._parsePosition(series.innerRadius, getOuterBase(d));
+                    }
+                    return Math.max(iR, 0);
+                },
+                getArc = function (d) {
+                    // Calculate the radii of the circles
+                    var arc;
+                    // The actual arc
+                    arc = d3.svg.arc()
+                        .innerRadius(getInnerRadius(d))
+                        .outerRadius(getOuterRadius(d));
+                    // Return the value
+                    return arc(d);
+                },
+                arcTween = function (a) {
+                    a.innerRadius = getInnerRadius(a);
+                    a.outerRadius = getOuterRadius(a);
+                    var i = d3.interpolate(this._current, a),
+                        arc;
+                    // The actual arc
+                    arc = d3.svg.arc()
+                        .innerRadius(function (d) { return d.innerRadius; })
+                        .outerRadius(function (d) { return d.outerRadius; });
+                    this._current = i(0);
+                    return function(t) {
+                        return arc(i(t));
+                    };
+                },
+                getTransform = function (origin) {
+                    return function (d) {
+                        var xString,
+                            yString;
+                        if (series.x && series.y) {
+                            if (!origin || series.x._hasCategories()) {
+                                xString = dimple._helpers.cx(d, chart, series);
+                            } else {
+                                xString = series.x._previousOrigin;
+                            }
+                            if (!origin || series.y._hasCategories()) {
+                                yString = dimple._helpers.cy(d, chart, series);
+                            } else {
+                                yString = series.y._previousOrigin;
+                            }
+                        } else {
+                            xString = (chart._xPixels() + chart._widthPixels() / 2);
+                            yString = (chart._yPixels() + chart._heightPixels() / 2);
+                        }
+                        return "translate(" + xString + "," + yString + ")";
+                    };
+                };
+
+            // Clear tool tips
+            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
+                chart._tooltipGroup.remove();
+            }
+
+            if (series.shapes === null || series.shapes === undefined) {
+                theseShapes =  chart._group.selectAll("." + classes.join(".")).data(chartData);
             } else {
                 theseShapes = series.shapes.data(chartData, function (d) { return d.key; });
             }
@@ -3120,745 +3933,71 @@ window.dimple = dimple;
             // Add
             theseShapes
                 .enter()
-                .append("circle")
+                .append("path")
                 .attr("id", function (d) { return d.key; })
                 .attr("class", function (d) {
-                    return className + " bubble " +
-                        d.aggField.join(" ").split(" ").join("_") + " " +
-                        d.xField.join(" ").split(" ").join("_") + " " +
-                        d.yField.join(" ").split(" ").join("_") + " " +
-                        d.zField.join(" ").split(" ").join("_");
+                    var c = [];
+                    c = c.concat(d.aggField);
+                    c = c.concat(d.pField);
+                    return classes.join(" ") + " " + dimple._createClass(c);
                 })
-                .attr("cx", function (d) {
-                    return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._origin);
-                })
-                .attr("cy", function (d) {
-                    return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._origin);
-                })
-                .attr("r", 0)
+                .attr("d", getArc)
                 .attr("opacity", function (d) { return dimple._helpers.opacity(d, chart, series); })
-                .on("mouseover", function (e) {
-                    self.enterEventHandler(e, this, chart, series);
-                })
-                .on("mouseleave", function () {
-                    self.leaveEventHandler(chart);
-                })
+                .on("mouseover", function (e) { dimple._showBarTooltip(e, this, chart, series); })
+                .on("mouseleave", function (e) { dimple._removeTooltip(e, this, chart, series); })
                 .call(function () {
                     if (!chart.noFormats) {
                         this.attr("fill", function (d) { return dimple._helpers.fill(d, chart, series); })
                             .attr("stroke", function (d) { return dimple._helpers.stroke(d, chart, series); });
                     }
+                })
+                .attr("transform", getTransform(true))
+                .each(function (d) {
+                    this._current = d;
+                    d.innerRadius = getInnerRadius(d);
+                    d.outerRadius = getOuterRadius(d);
                 });
 
             // Update
-            theseShapes
-                .transition().duration(duration)
-                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                .attr("r", function (d) { return dimple._helpers.r(d, chart, series); })
+            updated = chart._handleTransition(theseShapes, duration, chart, series)
                 .call(function () {
+                    if (duration && duration > 0) {
+                        this.attrTween("d", arcTween);
+                    } else {
+                        this.attr("d", getArc);
+                    }
                     if (!chart.noFormats) {
                         this.attr("fill", function (d) { return dimple._helpers.fill(d, chart, series); })
                             .attr("stroke", function (d) { return dimple._helpers.stroke(d, chart, series); });
                     }
-                });
+                })
+                .attr("transform", getTransform(false));
 
             // Remove
-            theseShapes
-                .exit()
-                .transition().duration(duration)
-                .attr("r", 0)
-                .attr("cx", function (d) {
-                    return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._origin);
-                })
-                .attr("cy", function (d) {
-                    return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._origin);
-                })
-                .each("end", function () {
-                    d3.select(this).remove();
-                });
+            removed = chart._handleTransition(theseShapes.exit(), duration, chart, series)
+                .attr("transform", getTransform(true))
+                .attr("d", getArc);
+
+            dimple._postDrawHandling(series, updated, removed, duration);
 
             // Save the shapes to the series array
             series.shapes = theseShapes;
-        },
-
-        // Handle the mouse enter event
-        enterEventHandler: function (e, shape, chart, series) {
-
-            // The margin between the text and the box
-            var textMargin = 5,
-                // The margin between the ring and the popup
-                popupMargin = 10,
-                // The popup animation duration in ms
-                animDuration = 750,
-                // Collect some facts about the highlighted bubble
-                selectedShape = d3.select(shape),
-                cx = parseFloat(selectedShape.attr("cx")),
-                cy = parseFloat(selectedShape.attr("cy")),
-                r = parseFloat(selectedShape.attr("r")),
-                opacity = selectedShape.attr("opacity"),
-                fill = selectedShape.attr("fill"),
-                dropDest = series._dropLineOrigin(),
-                // Fade the popup stroke mixing the shape fill with 60% white
-                popupStrokeColor = d3.rgb(
-                    d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
-                ),
-                // Fade the popup fill mixing the shape fill with 80% white
-                popupFillColor = d3.rgb(
-                    d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
-                ),
-                t,
-                box,
-                rows = [],
-                // The running y value for the text elements
-                y = 0,
-                // The maximum bounds of the text elements
-                w = 0,
-                h = 0,
-                overlap;
-
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-            chart._tooltipGroup = chart.svg.append("g");
-
-            // Add a ring around the data point
-            chart._tooltipGroup.append("circle")
-                .attr("cx", cx)
-                .attr("cy", cy)
-                .attr("r", r)
-                .attr("opacity", 0)
-                .style("fill", "none")
-                .style("stroke", fill)
-                .style("stroke-width", 1)
-                .transition()
-                    .duration(animDuration / 2)
-                    .ease("linear")
-                        .attr("opacity", 1)
-                        .attr("r", r + 4)
-                        .style("stroke-width", 2);
-
-            // Add a drop line to the x axis
-            if (dropDest.y !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", cx)
-                    .attr("y1", (cy < dropDest.y ? cy + r + 4 : cy - r - 4))
-                    .attr("x2", cx)
-                    .attr("y2", (cy < dropDest.y ? cy + r + 4 : cy - r - 4))
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                            // Added 1px offset to cater for svg issue where a transparent
-                            // group overlapping a line can sometimes hide it in some browsers
-                            // Issue #10
-                            .attr("y2", (cy < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
-            }
-
-            // Add a drop line to the y axis
-            if (dropDest.x !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", (cx < dropDest.x ? cx + r + 4 : cx - r - 4))
-                    .attr("y1", cy)
-                    .attr("x2", (cx < dropDest.x ? cx + r + 4 : cx - r - 4))
-                    .attr("y2", cy)
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                            // Added 1px offset to cater for svg issue where a transparent
-                            // group overlapping a line can sometimes hide it in some browsers
-                            // Issue #10
-                            .attr("x2", (cx < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
-            }
-
-            // Add a group for text
-            t = chart._tooltipGroup.append("g");
-            // Create a box for the popup in the text group
-            box = t.append("rect")
-                .attr("class", "tooltip");
-
-            // Add the series categories
-            if (series.categoryFields !== null && series.categoryFields !== undefined && series.categoryFields.length > 0) {
-                series.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.aggField[i] !== c ? ": " + e.aggField[i] : ""));
-                }, this);
-            }
-
-            if (series.x._hasTimeField()) {
-                rows.push(series.x.timeField + ": " + series.x._getFormat()(e.xField[0]));
-            } else if (series.x._hasCategories()) {
-                // Add the x axis categories
-                series.x.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.xField[i] !== c ? ": " + e.xField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.x.measure + ": " + series.x._getFormat()(e.cx));
-            }
-
-            if (series.y._hasTimeField()) {
-                rows.push(series.y.timeField + ": " + series.y._getFormat()(e.yField[0]));
-            } else if (series.y._hasCategories()) {
-                // Add the y axis categories
-                series.y.categoryFields.forEach(function (c, i) {
-                    rows.push(c + (e.yField[i] !== c ? ": " + e.yField[i] : ""));
-                }, this);
-            } else {
-                // Add the axis measure value
-                rows.push(series.y.measure + ": " + series.y._getFormat()(e.cy));
-            }
-
-            if (series.z !== null && series.z !== undefined) {
-                // Add the axis measure value
-                rows.push(series.z.measure + ": " + series.z._getFormat()(e.zValue));
-            }
-
-            if (series.c !== null && series.c !== undefined) {
-                // Add the axis measure value
-                rows.push(series.c.measure + ": " + series.c._getFormat()(e.cValue));
-            }
-
-            // Get distinct text rows to deal with cases where 2 axes have the same dimensionality
-            rows = rows.filter(function(elem, pos) {
-                return rows.indexOf(elem) === pos;
-            });
-
-            // Create a text object for every row in the popup
-            t.selectAll(".textHoverShapes").data(rows).enter()
-                .append("text")
-                    .attr("class", "tooltip")
-                    .text(function (d) { return d; })
-                    .style("font-family", "sans-serif")
-                    .style("font-size", "10px");
-
-            // Get the max height and width of the text items
-            t.each(function () {
-                w = (this.getBBox().width > w ? this.getBBox().width : w);
-                h = (this.getBBox().width > h ? this.getBBox().height : h);
-            });
-
-            // Position the text relatve to the bubble, the absolute positioning
-            // will be done by translating the group
-            t.selectAll("text")
-                .attr("x", 0)
-                .attr("y", function () {
-                    // Increment the y position
-                    y += this.getBBox().height;
-                    // Position the text at the centre point
-                    return y - (this.getBBox().height / 2);
-                });
-
-            // Draw the box with a margin around the text
-            box.attr("x", -textMargin)
-                .attr("y", -textMargin)
-                .attr("height", Math.floor(y + textMargin) - 0.5)
-                .attr("width", w + 2 * textMargin)
-                .attr("rx", 5)
-                .attr("ry", 5)
-                .style("fill", popupFillColor)
-                .style("stroke", popupStrokeColor)
-                .style("stroke-width", 2)
-                .style("opacity", 0.95);
-
-            // Shift the ring margin left or right depending on whether it will overlap the edge
-            overlap = cx + r + textMargin + popupMargin + w > parseFloat(chart.svg.node().getBBox().width);
-
-            // Translate the shapes to the x position of the bubble (the x position of the shapes is handled)
-            t.attr("transform", "translate(" +
-                   (overlap ? cx - (r + textMargin + popupMargin + w) : cx + r + textMargin + popupMargin) + " , " +
-                   (cy - ((y - (h - textMargin)) / 2)) +
-                ")");
-        },
-
-        // Handle the mouse leave event
-        leaveEventHandler: function (chart) {
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
         }
     };
-
-
-    // Copyright: 2013 PMSI-AlignAlytics
-    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
-    // Source: /src/objects/plot/line.js
-    dimple.plot.line = {
-        stacked: false,
-        supportedAxes: ["x", "y", "c"],
-        draw: function (chart, series, duration) {
-
-            // Get self pointer for inner functions
-            var self = this,
-                data = series._positionData,
-                fillIns = [],
-                uniqueValues = [],
-                // If there is a category axis we should draw a line for each aggField.  Otherwise
-                // the first aggField defines the points and the others define the line
-                firstAgg = 1,
-                graded = false,
-                line,
-                markers,
-                markerBacks;
-
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-
-            if (series.x._hasCategories() || series.y._hasCategories()) {
-                firstAgg = 0;
-            }
-
-            data.forEach(function (d) {
-                var filter = [],
-                    match = false,
-                    k;
-
-                for (k = firstAgg; k < d.aggField.length; k += 1) {
-                    filter.push(d.aggField[k]);
-                }
-
-                uniqueValues.forEach(function (d) {
-                    match = match || (d.join("/") === filter.join("/"));
-                }, this);
-
-                if (!match) {
-                    uniqueValues.push(filter);
-                }
-
-            }, this);
-
-            if (series.c !== null && series.c !== undefined && ((series.x._hasCategories() && series.y._hasMeasure()) || (series.y._hasCategories() && series.x._hasMeasure()))) {
-                graded = true;
-                uniqueValues.forEach(function (seriesValue) {
-                    dimple._addGradient(seriesValue, "fill-line-gradient-" + seriesValue.join("_").replace(" ", ""), (series.x._hasCategories() ? series.x : series.y), data, chart, duration, "fill");
-                }, this);
-            }
-
-            line = d3.svg.line()
-                .x(function (d) { return dimple._helpers.cx(d, chart, series); })
-                .y(function (d) { return dimple._helpers.cy(d, chart, series); });
-
-            if (series.shapes === null || series.shapes === undefined) {
-                series.shapes = chart._group.selectAll(".line")
-                    .data(uniqueValues)
-                    .enter()
-                        .append("svg:path")
-                            .attr("opacity", function(d) { return chart.getColor(d).opacity; });
-            }
-            series.shapes
-                .data(uniqueValues)
-                .transition().duration(duration)
-                .attr("class", function (d) { return "series line " + d.join("_").split(" ").join("_"); })
-                .attr("d", function (d) {
-                    var seriesData = [];
-                    data.forEach(function (r) {
-                        var add = true,
-                            k;
-                        for (k = firstAgg; k < r.aggField.length; k += 1) {
-                            add = add && (d[k - firstAgg] === r.aggField[k]);
-                        }
-                        if (add) {
-                            seriesData.push(r);
-                        }
-                    }, this);
-                    seriesData.sort(function (a, b) {
-                        var sortValue = 0;
-                        if (series.x._hasCategories()) {
-                            sortValue = (dimple._helpers.cx(a, chart, series) < dimple._helpers.cx(b, chart, series) ? -1 : 1);
-                        } else if (series.y._hasCategories()) {
-                            sortValue = (dimple._helpers.cy(a, chart, series) < dimple._helpers.cy(b, chart, series) ? -1 : 1);
-                        }
-                        return sortValue;
-                    });
-                    if (seriesData.length === 1) {
-                        fillIns.push({
-                            cx: dimple._helpers.cx(seriesData[0], chart, series),
-                            cy: dimple._helpers.cy(seriesData[0], chart, series),
-                            opacity: chart.getColor(d[d.length - 1]).opacity,
-                            color: chart.getColor(d[d.length - 1]).stroke
-                        });
-                        d3.select(this).remove();
-                    }
-                    return line(seriesData);
-                })
-                .call(function () {
-                    if (!chart.noFormats) {
-                        this.attr("fill", "none")
-                            .attr("stroke", function (d) { return (graded ? "url(#fill-line-gradient-" + d.join("_").replace(" ", "") + ")" : chart.getColor(d[d.length - 1]).stroke);    })
-                            .attr("stroke-width", series.lineWeight);
-                    }
-                });
-
-            if (series.lineMarkers) {
-                if (series._markerBacks === null || series._markerBacks === undefined) {
-                    markerBacks = chart._group.selectAll(".markerBacks").data(data);
-                } else {
-                    markerBacks = series._markerBacks.data(data, function (d) { return d.key; });
-                }
-                // Add
-                markerBacks
-                    .enter()
-                    .append("circle")
-                    .attr("id", function (d) { return d.key; })
-                    .attr("class", "markerBacks")
-                    .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                    .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                    .attr("r", 0)
-                    .attr("fill", "white")
-                    .attr("stroke", "none");
-
-                // Update
-                markerBacks
-                    .transition().duration(duration)
-                    .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                    .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                    .attr("r", 2 + series.lineWeight);
-                // Remove
-                markerBacks
-                    .exit()
-                    .transition().duration(duration)
-                    .attr("r", 0)
-                    .each("end", function () {
-                        d3.select(this).remove();
-                    });
-                series._markerBacks = markerBacks;
-            }
-
-            // Deal with markers in the same way as main series to fix #28
-            if (series._markers === null || series._markers === undefined) {
-                markers = chart._group.selectAll(".markers").data(data);
-            } else {
-                markers = series._markers.data(data, function (d) { return d.key; });
-            }
-
-
-            // Add the actual marker. We need to do this even if we aren't displaying them because they
-            // catch hover events
-            markers
-                .enter()
-                .append("circle")
-                .attr("id", function (d) { return d.key; })
-                .attr("class", "markers")
-                .on("mouseover", function (e) {
-                    self.enterEventHandler(e, this, chart, series);
-                })
-                .on("mouseleave", function (e) {
-                    self.leaveEventHandler(e, this, chart, series);
-                })
-                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                .attr("r", 0)
-                .attr("opacity", function (d) { return (series.lineMarkers ? chart.getColor(d).opacity : 0); })
-                .call(function () {
-                    if (!chart.noFormats) {
-                        this.attr("fill", "white")
-                            .style("stroke-width", series.lineWeight)
-                            .attr("stroke", function (d) {
-                                return (graded ? dimple._helpers.fill(d, chart, series) : chart.getColor(d.aggField[d.aggField.length - 1]).stroke);
-                            });
-                    }
-                });
-
-            markers
-                .transition().duration(duration)
-                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
-                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
-                .attr("r", 2 + series.lineWeight)
-                .call(function () {
-                    if (!chart.noFormats) {
-                        this.attr("fill", "white")
-                            .style("stroke-width", series.lineWeight)
-                            .attr("stroke", function (d) {
-                                return (graded ? dimple._helpers.fill(d, chart, series) : chart.getColor(d.aggField[d.aggField.length - 1]).stroke);
-                            });
-                    }
-                });
-
-            markers
-                .exit()
-                .transition().duration(duration)
-                .attr("r", 0)
-                .each("end", function () {
-                    d3.select(this).remove();
-                });
-
-            // Save the shapes to the series array
-            series._markers = markers;
-
-            // Deal with single point lines if there are no markers
-            if (!series.lineMarkers) {
-                chart._group.selectAll(".fill")
-                    .data(fillIns)
-                    .enter()
-                    .append("circle")
-                    .attr("cx", function (d) { return d.cx; })
-                    .attr("cy", function (d) { return d.cy; })
-                    .attr("r", series.lineWeight)
-                    .attr("opacity", function (d) { return d.opacity; })
-                    .call(function () {
-                        if (!chart.noFormats) {
-                            this.attr("fill", function (d) { return d.color; })
-                                .attr("stroke", "none");
-                        }
-                    });
-            }
-        },
-
-        // Handle the mouse enter event
-        enterEventHandler: function (e, shape, chart, series) {
-
-            // The margin between the text and the box
-            var textMargin = 5,
-                // The margin between the ring and the popup
-                popupMargin = 10,
-                // The popup animation duration in ms
-                animDuration = 750,
-                // Collect some facts about the highlighted bubble
-                selectedShape = d3.select(shape),
-                cx = parseFloat(selectedShape.attr("cx")),
-                cy = parseFloat(selectedShape.attr("cy")),
-                r = parseFloat(selectedShape.attr("r")),
-                opacity = dimple._helpers.opacity(e, chart, series),
-                fill = selectedShape.attr("stroke"),
-                dropDest = series._dropLineOrigin(),
-                // Fade the popup stroke mixing the shape fill with 60% white
-                popupStrokeColor = d3.rgb(
-                    d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
-                ),
-                // Fade the popup fill mixing the shape fill with 80% white
-                popupFillColor = d3.rgb(
-                    d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
-                    d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
-                    d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
-                ),
-                // The running y value for the text elements
-                y = 0,
-                // The maximum bounds of the text elements
-                w = 0,
-                h = 0,
-                t,
-                box,
-                rows = [],
-                overlap;
-
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-            chart._tooltipGroup = chart.svg.append("g");
-
-            // On hover make the line marker visible immediately
-            selectedShape.style("opacity", 1);
-
-            // Add a ring around the data point
-            chart._tooltipGroup.append("circle")
-                .attr("cx", cx)
-                .attr("cy", cy)
-                .attr("r", r)
-                .attr("opacity", 0)
-                .style("fill", "none")
-                .style("stroke", fill)
-                .style("stroke-width", 1)
-                .transition()
-                    .duration(animDuration / 2)
-                    .ease("linear")
-                        .attr("opacity", 1)
-                        .attr("r", r + series.lineWeight + 2)
-                        .style("stroke-width", 2);
-
-            // Add a drop line to the x axis
-            if (dropDest.y !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", cx)
-                    .attr("y1", (cy < dropDest.y ? cy + r + series.lineWeight + 2 : cy - r - series.lineWeight - 2))
-                    .attr("x2", cx)
-                    .attr("y2", (cy < dropDest.y ? cy + r + series.lineWeight + 2 : cy - r - series.lineWeight - 2))
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                            // Added 1px offset to cater for svg issue where a transparent
-                            // group overlapping a line can sometimes hide it in some browsers
-                            // Issue #10
-                            .attr("y2", (cy < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
-            }
-
-            // Add a drop line to the y axis
-            if (dropDest.x !== null) {
-                chart._tooltipGroup.append("line")
-                    .attr("x1", (cx < dropDest.x ? cx + r + series.lineWeight + 2 : cx - r - series.lineWeight - 2))
-                    .attr("y1", cy)
-                    .attr("x2", (cx < dropDest.x ? cx + r + series.lineWeight + 2 : cx - r - series.lineWeight - 2))
-                    .attr("y2", cy)
-                    .style("fill", "none")
-                    .style("stroke", fill)
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", ("3, 3"))
-                    .style("opacity", opacity)
-                    .transition()
-                        .delay(animDuration / 2)
-                        .duration(animDuration / 2)
-                        .ease("linear")
-                            // Added 1px offset to cater for svg issue where a transparent
-                            // group overlapping a line can sometimes hide it in some browsers
-                            // Issue #10
-                            .attr("x2", (cx < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
-            }
-
-            // Add a group for text
-            t = chart._tooltipGroup.append("g");
-            // Create a box for the popup in the text group
-            box = t.append("rect")
-                .attr("class", "tooltip");
-
-            // Add the series categories
-            if (series.categoryFields !== null && series.categoryFields !== undefined && series.categoryFields.length > 0) {
-                series.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.aggField[i] !== c ? ": " + e.aggField[i] : ""));
-                }, this);
-            }
-
-            if (series.x._hasTimeField()) {
-                rows.push(series.x.timeField + ": " + series.x._getFormat()(e.xField[0]));
-            } else if (series.x._hasCategories()) {
-                // Add the x axis categories
-                series.x.categoryFields.forEach(function (c, i) {
-                    // If the category name and value match don't display the category name
-                    rows.push(c + (e.xField[i] !== c ? ": " + e.xField[i] : ""));
-                }, this);
-            } else if (series.x.useLog) {
-                // Add the y axis log
-                rows.push(series.x.measure + ": " + e.cx);
-            } else {
-                // Add the axis measure value
-                rows.push(series.x.measure + ": " + series.x._getFormat()(e.cx));
-            }
-
-            if (series.y._hasTimeField()) {
-                rows.push(series.y.timeField + ": " + series.y._getFormat()(e.yField[0]));
-            } else if (series.y._hasCategories()) {
-                // Add the y axis categories
-                series.y.categoryFields.forEach(function (c, i) {
-                    rows.push(c + (e.yField[i] !== c ? ": " + e.yField[i] : ""));
-                }, this);
-            } else if (series.y.useLog) {
-                // Add the y axis log
-                rows.push(series.y.measure + ": " + e.cy);
-            } else {
-                // Add the axis measure value
-                rows.push(series.y.measure + ": " + series.y._getFormat()(e.cy));
-            }
-
-            if (series.z !== null && series.z !== undefined) {
-                // Add the axis measure value
-                rows.push(series.z.measure + ": " + series.z._getFormat()(e.zValue));
-            }
-
-            if (series.c !== null && series.c !== undefined) {
-                // Add the axis measure value
-                rows.push(series.c.measure + ": " + series.c._getFormat()(e.cValue));
-            }
-
-            // Get distinct text rows to deal with cases where 2 axes have the same dimensionality
-            rows = rows.filter(function(elem, pos) {
-                return rows.indexOf(elem) === pos;
-            });
-
-            // Create a text object for every row in the popup
-            t.selectAll(".textHoverShapes").data(rows).enter()
-                .append("text")
-                    .attr("class", "tooltip")
-                    .text(function (d) { return d; })
-                    .style("font-family", "sans-serif")
-                    .style("font-size", "10px");
-
-            // Get the max height and width of the text items
-            t.each(function () {
-                w = (this.getBBox().width > w ? this.getBBox().width : w);
-                h = (this.getBBox().width > h ? this.getBBox().height : h);
-            });
-
-            // Position the text relatve to the bubble, the absolute positioning
-            // will be done by translating the group
-            t.selectAll("text")
-                .attr("x", 0)
-                .attr("y", function () {
-                    // Increment the y position
-                    y += this.getBBox().height;
-                    // Position the text at the centre point
-                    return y - (this.getBBox().height / 2);
-                });
-
-            // Draw the box with a margin around the text
-            box.attr("x", -textMargin)
-                .attr("y", -textMargin)
-                .attr("height", Math.floor(y + textMargin) - 0.5)
-                .attr("width", w + 2 * textMargin)
-                .attr("rx", 5)
-                .attr("ry", 5)
-                .style("fill", popupFillColor)
-                .style("stroke", popupStrokeColor)
-                .style("stroke-width", 2)
-                .style("opacity", 0.95);
-
-            // Shift the ring margin left or right depending on whether it will overlap the edge
-            overlap = cx + r + textMargin + popupMargin + w > parseFloat(chart.svg.node().getBBox().width);
-
-            // Translate the shapes to the x position of the bubble (the x position of the shapes is handled)
-            t.attr("transform", "translate(" +
-                   (overlap ? cx - (r + textMargin + popupMargin + w) : cx + r + textMargin + popupMargin) + " , " +
-                   (cy - ((y - (h - textMargin)) / 2)) +
-                ")");
-        },
-
-        // Handle the mouse leave event
-        leaveEventHandler: function (e, shape, chart, series) {
-            // Return the opacity of the marker
-            d3.select(shape).style("opacity", (series.lineMarkers ? dimple._helpers.opacity(e, chart, series) : 0));
-            if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
-                chart._tooltipGroup.remove();
-            }
-        }
-    };
-
-
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_addGradient.js
     dimple._addGradient = function (seriesValue, id, categoryAxis, data, chart, duration, colorProperty) {
 
-        var grad = chart._group.select("#" + id),
+        var sArray = [].concat(seriesValue),
+            grad = chart._group.select("#" + id),
             cats = [],
             field = categoryAxis.position + "Field",
             transition = true,
             colors = [];
 
         data.forEach(function (d) {
-            if (cats.indexOf(d[field]) === -1) {
+            if (cats.indexOf(d[field]) === -1 && d.aggField.join("_") === sArray.join("_")) {
                 cats.push(d[field]);
             }
         }, this);
@@ -3882,7 +4021,7 @@ window.dimple = dimple;
                 k = 0;
 
             for (k = 0; k < data.length; k = k + 1) {
-                if (data[k].aggField.join("_") === seriesValue.join("_") && data[k][field].join("_") === cat.join("_")) {
+                if (data[k].aggField.join("_") === sArray.join("_") && data[k][field].join("_") === cat.join("_")) {
                     row = data[k];
                     break;
                 }
@@ -3892,9 +4031,7 @@ window.dimple = dimple;
         }, this);
 
         if (transition) {
-            grad.selectAll("stop")
-                .data(colors)
-                .transition().duration(duration)
+            chart._handleTransition(grad.selectAll("stop").data(colors), duration, chart)
                 .attr("offset", function(d) { return d.offset; })
                 .attr("stop-color", function(d) { return d.color; });
         } else {
@@ -3908,24 +4045,247 @@ window.dimple = dimple;
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_arrayIndexCompare.js
+    dimple._arrayIndexCompare = function (array, a, b) {
+        // Find the element which comes first in the array
+        var returnValue,
+            p,
+            q,
+            aMatch,
+            bMatch,
+            rowArray;
+        for (p = 0; p < array.length; p += 1) {
+            aMatch = true;
+            bMatch = true;
+            rowArray = [].concat(array[p]);
+            for (q = 0; q < a.length; q += 1) {
+                aMatch = aMatch && (a[q] === rowArray[q]);
+            }
+            for (q = 0; q < b.length; q += 1) {
+                bMatch = bMatch && (b[q] === rowArray[q]);
+            }
+            if (aMatch && bMatch) {
+                returnValue = 0;
+                break;
+            } else if (aMatch) {
+                returnValue = -1;
+                break;
+            } else if (bMatch) {
+                returnValue = 1;
+                break;
+            }
+        }
+        return returnValue;
+    };
+
+
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_createClass.js
+    dimple._createClass = function (stringArray) {
+        var i,
+            returnArray = [],
+            replacer = function(s) {
+                var c = s.charCodeAt(0),
+                    returnString = "-";
+                if (c >= 65 && c <= 90) {
+                    returnString = s.toLowerCase();
+                }
+                return returnString;
+            };
+        if (stringArray.length > 0) {
+            for (i = 0; i < stringArray.length; i += 1) {
+                /*jslint regexp: true */
+                returnArray.push("dimple-" + stringArray[i].toString().replace(/[^a-z0-9]/g, replacer));
+                /*jslint regexp: false */
+            }
+        } else {
+            returnArray = ["dimple-all"];
+        }
+        return returnArray.join(" ");
+    };
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_drawMarkerBacks.js
+    dimple._drawMarkerBacks = function (lineDataRow, chart, series, duration, className) {
+        var markerBacks,
+            markerBackClasses = ["dimple-marker-back", className, lineDataRow.keyString],
+            rem;
+        if (series.lineMarkers) {
+            if (series._markerBacks === null || series._markerBacks === undefined || series._markerBacks[lineDataRow.keyString] === undefined) {
+                markerBacks = chart._group.selectAll("." + markerBackClasses.join(".")).data(lineDataRow.markerData);
+            } else {
+                markerBacks = series._markerBacks[lineDataRow.keyString].data(lineDataRow.markerData, function (d) { return d.key; });
+            }
+            // Add
+            markerBacks
+                .enter()
+                .append("circle")
+                .attr("id", function (d) { return d.key; })
+                .attr("class", function (d) {
+                    var fields = [];
+                    if (series.x._hasCategories()) {
+                        fields = fields.concat(d.xField);
+                    }
+                    if (series.y._hasCategories()) {
+                        fields = fields.concat(d.yField);
+                    }
+                    return dimple._createClass(fields) + " " + markerBackClasses.join(" ");
+                })
+                .attr("cx", function (d) { return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._previousOrigin); })
+                .attr("cy", function (d) { return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._previousOrigin); })
+                .attr("r", 0)
+                .attr("fill", "white")
+                .attr("stroke", "none");
+
+            // Update
+            chart._handleTransition(markerBacks, duration, chart)
+                .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
+                .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
+                .attr("r", 2 + series.lineWeight);
+
+            // Remove
+            rem = chart._handleTransition(markerBacks.exit(), duration, chart)
+                .attr("cx", function (d) { return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._origin); })
+                .attr("cy", function (d) { return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._origin); })
+                .attr("r", 0);
+
+            // Run after transition methods
+            if (duration === 0) {
+                rem.remove();
+            } else {
+                rem.each("end", function () {
+                    d3.select(this).remove();
+                });
+            }
+
+            if (series._markerBacks === undefined || series._markerBacks === null) {
+                series._markerBacks = {};
+            }
+            series._markerBacks[lineDataRow.keyString] = markerBacks;
+        }
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_drawMarkers.js
+    dimple._drawMarkers = function (lineDataRow, chart, series, duration, className, useGradient, enterEventHandler, leaveEventHandler) {
+        var markers,
+            markerClasses = ["dimple-marker", className, lineDataRow.keyString],
+            rem;
+
+        // Begin by drawing the backings
+        dimple._drawMarkerBacks(lineDataRow, chart, series, duration, className);
+
+        // Deal with markers in the same way as main series to fix #28
+        if (series._markers === null || series._markers === undefined || series._markers[lineDataRow.keyString] === undefined) {
+            markers = chart._group.selectAll("." + markerClasses.join(".")).data(lineDataRow.markerData);
+        } else {
+            markers = series._markers[lineDataRow.keyString].data(lineDataRow.markerData, function (d) {
+                return d.key;
+            });
+        }
+        // Add
+        markers
+            .enter()
+            .append("circle")
+            .attr("id", function (d) {
+                return d.key;
+            })
+            .attr("class", function (d) {
+                var fields = [];
+                if (series.x._hasCategories()) {
+                    fields = fields.concat(d.xField);
+                }
+                if (series.y._hasCategories()) {
+                    fields = fields.concat(d.yField);
+                }
+                return dimple._createClass(fields) + " " + markerClasses.join(" ");
+            })
+            .on("mouseover", function (e) {
+                enterEventHandler(e, this, chart, series);
+            })
+            .on("mouseleave", function (e) {
+                leaveEventHandler(e, this, chart, series);
+            })
+            .attr("cx", function (d) {
+                return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._previousOrigin);
+            })
+            .attr("cy", function (d) {
+                return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._previousOrigin);
+            })
+            .attr("r", 0)
+            .attr("opacity", (series.lineMarkers || lineDataRow.data.length < 2 ? lineDataRow.color.opacity : 0))
+            .call(function () {
+                if (!chart.noFormats) {
+                    this.attr("fill", "white")
+                        .style("stroke-width", series.lineWeight)
+                        .attr("stroke", function (d) {
+                            return (useGradient ? dimple._helpers.fill(d, chart, series) : lineDataRow.color.stroke);
+                        });
+                }
+            });
+
+        // Update
+        chart._handleTransition(markers, duration, chart)
+            .attr("cx", function (d) { return dimple._helpers.cx(d, chart, series); })
+            .attr("cy", function (d) { return dimple._helpers.cy(d, chart, series); })
+            .attr("r", 2 + series.lineWeight)
+            .call(function () {
+                if (!chart.noFormats) {
+                    this.attr("fill", "white")
+                        .style("stroke-width", series.lineWeight)
+                        .attr("stroke", function (d) {
+                            return (useGradient ? dimple._helpers.fill(d, chart, series) : lineDataRow.color.stroke);
+                        });
+                }
+            });
+
+        // Remove
+        rem = chart._handleTransition(markers.exit(), duration, chart)
+            .attr("cx", function (d) { return (series.x._hasCategories() ? dimple._helpers.cx(d, chart, series) : series.x._origin); })
+            .attr("cy", function (d) { return (series.y._hasCategories() ? dimple._helpers.cy(d, chart, series) : series.y._origin); })
+            .attr("r", 0);
+
+        // Run after transition methods
+        if (duration === 0) {
+            rem.remove();
+        } else {
+            rem.each("end", function () {
+                d3.select(this).remove();
+            });
+        }
+
+        if (series._markers === undefined || series._markers === null) {
+            series._markers = {};
+        }
+        series._markers[lineDataRow.keyString] = markers;
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/objects/chart/methods/_getOrderedList.js
     dimple._getOrderedList = function (data, mainField, levelDefinitions) {
-        var rollupData = [],
+        var rollupData,
             sortStack = [],
             finalArray = [],
-            fields = [mainField],
+            mainArray = [].concat(mainField),
+            fields = [].concat(mainField),
             defs = [];
+
         // Force the level definitions into an array
         if (levelDefinitions !== null && levelDefinitions !== undefined) {
             defs = defs.concat(levelDefinitions);
         }
         // Add the base case
-        defs = defs.concat({ ordering: mainField, desc: false });
+        defs = defs.concat({ ordering: mainArray, desc: false });
         // Exclude fields if this does not contain a function
         defs.forEach(function (def) {
-            var field;
+            var field,
+                values = [],
+                tempFields = [];
             if (typeof def.ordering === "function") {
                 for (field in data[0]) {
                     if (data[0].hasOwnProperty(field) && fields.indexOf(field) === -1) {
@@ -3934,9 +4294,24 @@ window.dimple = dimple;
                 }
             } else if (!(def.ordering instanceof Array)) {
                 fields.push(def.ordering);
+            } else {
+                // We now receive fields as an array or values as an array which is a bit of an oversight in the API
+                // We will therefore check the values of the array against the fields in the data
+                for (field = 0; field < def.ordering.length; field += 1) {
+                    if (data[0].hasOwnProperty(def.ordering[field])) {
+                        tempFields.push(def.ordering[field]);
+                    }
+                    values.push(def.ordering[field]);
+                }
+                // If more than half of the values are fields we will assume that these are fields and not dimension values
+                if (tempFields.length > values.length / 2) {
+                    fields.concat(tempFields);
+                } else {
+                    def.values = values;
+                }
             }
         }, this);
-        rollupData = dimple._rollUp(data, mainField, fields);
+        rollupData = dimple._rollUp(data, mainArray, fields);
         // If we go below the leaf stop recursing
         if (defs.length >= 1) {
             // Build a stack of compare methods
@@ -3946,13 +4321,12 @@ window.dimple = dimple;
                 var desc = (def.desc === null || def.desc === undefined ? false : def.desc),
                     ordering = def.ordering,
                     orderArray = [],
-                    field = (typeof ordering === "string" ? ordering : null),
                     sum = function (array) {
                         var total = 0,
                             i;
                         for (i = 0; i < array.length; i += 1) {
                             if (isNaN(array[i])) {
-                                total = 0;
+                                total = undefined;
                                 break;
                             } else {
                                 total += parseFloat(array[i]);
@@ -3964,7 +4338,7 @@ window.dimple = dimple;
                         var result = 0,
                             sumA = sum(a),
                             sumB = sum(b);
-                        if (!isNaN(sumA) && sumA !== 0 && !isNaN(sumB) && sumB !== 0) {
+                        if (!isNaN(sumA) && !isNaN(sumB)) {
                             result = parseFloat(sumA) - parseFloat(sumB);
                         } else if (!isNaN(Date.parse(a[0])) && !isNaN(Date.parse(b[0]))) {
                             result = Date.parse(a[0]) - Date.parse(b[0]);
@@ -3981,20 +4355,29 @@ window.dimple = dimple;
                     sortStack.push(function (a, b) {
                         return (desc ? -1 : 1) * ordering(a, b);
                     });
-                } else if (ordering instanceof Array) {
+                } else if (def.values && def.values.length > 0) {
                     // The order list may be an array of arrays
                     // combine the values with pipe delimiters.
                     // The delimiter is irrelevant as long as it is consistent
                     // with the sort predicate below
-                    ordering.forEach(function (d) {
+                    def.values.forEach(function (d) {
                         orderArray.push(([].concat(d)).join("|"));
                     }, this);
                     // Sort according to the axis position
                     sortStack.push(function (a, b) {
-                        var aStr = "".concat(a[mainField]),
-                            bStr = "".concat(b[mainField]),
+                        var aStr = "",
+                            bStr = "",
                             aIx,
-                            bIx;
+                            bIx,
+                            i;
+                        for (i = 0; i < mainArray.length; i += 1) {
+                            if (i > 0) {
+                                aStr += "|";
+                                bStr += "|";
+                            }
+                            aStr += a[mainArray[i]];
+                            bStr += b[mainArray[i]];
+                        }
                         // If the value is not found it should go to the end (if descending it
                         // should go to the start so that it ends up at the back when reversed)
                         aIx = orderArray.indexOf(aStr);
@@ -4004,16 +4387,18 @@ window.dimple = dimple;
                         return (desc ? -1 : 1) * (aIx - bIx);
                     });
                 } else {
-                    // Sort the data
-                    sortStack.push(function (a, b) {
-                        // The result value
-                        var result = 0;
-                        // Find the field
-                        if (a[field] !== undefined && b[field] !== undefined) {
-                            // Compare just the first mapped value
-                            result = compare([].concat(a[field]), [].concat(b[field]));
-                        }
-                        return (desc ? -1 : 1) * result;
+                    ([].concat(def.ordering)).forEach(function (field) {
+                        // Sort the data
+                        sortStack.push(function (a, b) {
+                            // The result value
+                            var result = 0;
+                            // Find the field
+                            if (a[field] !== undefined && b[field] !== undefined) {
+                                // Compare just the first mapped value
+                                result = compare([].concat(a[field]), [].concat(b[field]));
+                            }
+                            return (desc ? -1 : 1) * result;
+                        });
                     });
                 }
             });
@@ -4029,7 +4414,16 @@ window.dimple = dimple;
             // Return a simple array if only one field is being returned.
             // for multiple fields remove extra fields but leave objects
             rollupData.forEach(function (d) {
-                finalArray.push(d[mainField]);
+                var i,
+                    newRow = [];
+                if (mainArray.length === 1) {
+                    finalArray.push(d[mainArray[0]]);
+                } else {
+                    for (i = 0; i < mainArray.length; i += 1) {
+                        newRow.push(d[mainArray[i]]);
+                    }
+                    finalArray.push(newRow);
+                }
             }, this);
         }
         // Return the ordered list
@@ -4037,7 +4431,50 @@ window.dimple = dimple;
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_getSeriesOrder.js
+    dimple._getSeriesOrder = function (data, series) {
+        var rules = [].concat(series._orderRules),
+            cats = series.categoryFields,
+            returnValue = [];
+        if (cats !== null && cats !== undefined && cats.length > 0) {
+            if (series.c !== null && series.c !== undefined && series.c._hasMeasure()) {
+                rules.push({ ordering : series.c.measure, desc : true });
+            }
+            if (series.x._hasMeasure()) {
+                rules.push({ ordering : series.x.measure, desc : true });
+            }
+            if (series.y._hasMeasure()) {
+                rules.push({ ordering : series.y.measure, desc : true });
+            }
+            returnValue = dimple._getOrderedList(data, cats, rules);
+        }
+        return returnValue;
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_getSeriesSortPredicate.js
+    dimple._getSeriesSortPredicate = function (chart, series, orderedArray) {
+        return function (a, b) {
+            var sortValue = 0;
+            // Modified to keep trying until a difference is found.  Previously these were else if statements
+            // Issue #71
+            if (series.x._hasCategories()) {
+                sortValue = (dimple._helpers.cx(a, chart, series) - dimple._helpers.cx(b, chart, series));
+            }
+            if (sortValue === 0 && series.y._hasCategories()) {
+                sortValue = (dimple._helpers.cy(a, chart, series) - dimple._helpers.cy(b, chart, series));
+            }
+            if (sortValue === 0 && orderedArray) {
+                sortValue = dimple._arrayIndexCompare(orderedArray, a.aggField, b.aggField);
+            }
+            return sortValue;
+        };
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_helpers.js
     dimple._helpers = {
@@ -4070,13 +4507,19 @@ window.dimple = dimple;
 
         // Calculate the radius
         r: function (d, chart, series) {
-            var returnR = 0;
+            var returnR = 0,
+                scaleFactor = 1;
             if (series.z === null || series.z === undefined) {
-                returnR = 5;
-            } else if (series.z._hasMeasure()) {
-                returnR = series.z._scale(d.r);
+                returnR = (!series.radius || series.radius === "auto" ? 5 : series.radius);
             } else {
-                returnR = series.z._scale(chart._heightPixels() / 100);
+                if (series.radius && series.radius !== "auto" && series.radius > 1) {
+                    scaleFactor = series.radius / series.z._scale(series.z._max);
+                }
+                if (series.z._hasMeasure()) {
+                    returnR = series.z._scale(d.r) * scaleFactor;
+                } else {
+                    returnR = series.z._scale(chart._heightPixels() / 100) * scaleFactor;
+                }
             }
             return returnR;
         },
@@ -4205,7 +4648,7 @@ window.dimple = dimple;
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_parentHeight.js
     dimple._parentHeight = function (parent) {
@@ -4226,20 +4669,20 @@ window.dimple = dimple;
                 returnValue = 0;
             } else {
                 // Get the size from the parent recursively
-                returnValue = dimple._parseYPosition(d3.select(parent).attr("height"), parent.parentNode);
+                returnValue = dimple._parentHeight(parent.parentNode);
             }
         }
         return returnValue;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_parentWidth.js
     dimple._parentWidth = function (parent) {
         // This one seems to work in Chrome - good old Chrome!
         var returnValue = parent.offsetWidth;
         // This does it for IE
-        if (returnValue <= 0 || returnValue === null || returnValue === undefined) {
+        if (!returnValue || returnValue < 0) {
             returnValue = parent.clientWidth;
         }
         // FireFox is the hard one this time.  See this bug report:
@@ -4247,63 +4690,96 @@ window.dimple = dimple;
         // It's dealt with by trying to recurse up the dom until we find something
         // we can get a size for.  Usually the parent of the SVG.  It's a bit costly
         // but I don't know of any other way.
-        if (returnValue <= 0 || returnValue === null || returnValue === undefined) {
-            if (parent.parentNode === null || parent.parentNode === undefined) {
+        if (!returnValue || returnValue < 0) {
+            if (!parent.parentNode) {
                 // Give up - Recursion Exit Point
                 returnValue = 0;
             } else {
                 // Get the size from the parent recursively
-                returnValue = dimple._parseXPosition(d3.select(parent).attr("width"), parent.parentNode);
+                returnValue = dimple._parentWidth(parent.parentNode);
             }
         }
         return returnValue;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_parsePosition.js
+    dimple._parsePosition = function (value, maxValue) {
+        var returnValue = 0,
+            values;
+        if (value) {
+            values = value.toString().split(",");
+            values.forEach(function (v) {
+                if (v) {
+                    if (!isNaN(v)) {
+                        returnValue += parseFloat(v);
+                    } else if (v.slice(-1) === "%") {
+                        returnValue += maxValue * (parseFloat(v.slice(0, v.length - 1)) / 100);
+                    } else if (v.slice(-2) === "px") {
+                        returnValue += parseFloat(v.slice(0, v.length - 2));
+                    } else {
+                        returnValue = value;
+                    }
+                }
+            }, this);
+        }
+        // Take the position from the extremity if the value is negative
+        if (returnValue < 0) {
+            returnValue = maxValue + returnValue;
+        }
+        return returnValue;
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_parseXPosition.js
     dimple._parseXPosition = function (value, parent) {
-        var returnValue = 0,
-            values = value.toString().split(",");
-        values.forEach(function (v) {
-            if (v !== undefined && v !== null) {
-                if (!isNaN(v)) {
-                    returnValue += parseFloat(v);
-                } else if (v.slice(-1) === "%") {
-                    returnValue += dimple._parentWidth(parent) * (parseFloat(v.slice(0, v.length - 1)) / 100);
-                } else if (v.slice(-2) === "px") {
-                    returnValue += parseFloat(v.slice(0, v.length - 2));
-                } else {
-                    returnValue = value;
-                }
-            }
-        }, this);
-        return returnValue;
+        return dimple._parsePosition(value, dimple._parentWidth(parent));
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_parseYPosition.js
     dimple._parseYPosition = function (value, parent) {
-        var returnValue = 0,
-            values = value.toString().split(",");
-        values.forEach(function (v) {
-            if (v !== undefined && v !== null) {
-                if (!isNaN(v)) {
-                    returnValue += parseFloat(v);
-                } else if (v.slice(-1) === "%") {
-                    returnValue += dimple._parentHeight(parent) * (parseFloat(v.slice(0, v.length - 1)) / 100);
-                } else if (v.slice(-2) === "px") {
-                    returnValue += parseFloat(v.slice(0, v.length - 2));
-                } else {
-                    returnValue = value;
-                }
-            }
-        }, this);
-        return returnValue;
+        return dimple._parsePosition(value, dimple._parentHeight(parent));
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_drawMarkers.js
+    dimple._postDrawHandling = function (series, updated, removed, duration) {
+        // Run after transition methods
+        if (duration === 0) {
+            updated.each(function (d, i) {
+                if (series.afterDraw !== null && series.afterDraw !== undefined) {
+                    series.afterDraw(this, d, i);
+                }
+            });
+            removed.remove();
+        } else {
+            updated.each("end", function (d, i) {
+                if (series.afterDraw !== null && series.afterDraw !== undefined) {
+                    series.afterDraw(this, d, i);
+                }
+            });
+            removed.each("end", function () {
+                d3.select(this).remove();
+            });
+        }
+    };
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_removeTooltip.js
+    /*jslint unparam: true */
+    dimple._removeTooltip = function (e, shape, chart, series) {
+        if (chart._tooltipGroup) {
+            chart._tooltipGroup.remove();
+        }
+    };
+    /*jslint unparam: false */
+
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/_rollUp.js
     dimple._rollUp = function (data, fields, includeFields) {
@@ -4363,7 +4839,361 @@ window.dimple = dimple;
         return returnList;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_showBarTooltip.js
+    dimple._showBarTooltip = function (e, shape, chart, series) {
+
+        // The margin between the text and the box
+        var textMargin = 5,
+            // The margin between the ring and the popup
+            popupMargin = 10,
+           // The popup animation duration in ms
+            animDuration = 750,
+            // Collect some facts about the highlighted bar
+            selectedShape = d3.select(shape),
+            x = selectedShape.node().getBBox().x,
+            y = selectedShape.node().getBBox().y,
+            width = selectedShape.node().getBBox().width,
+            height = selectedShape.node().getBBox().height,
+            //transform = selectedShape.attr("transform"),
+            opacity = selectedShape.attr("opacity"),
+            fill = selectedShape.attr("fill"),
+            dropDest = series._dropLineOrigin(),
+            // Fade the popup stroke mixing the shape fill with 60% white
+            popupStrokeColor = d3.rgb(
+                d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
+                d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
+                d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
+            ),
+            // Fade the popup fill mixing the shape fill with 80% white
+            popupFillColor = d3.rgb(
+                d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
+                d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
+                d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
+            ),
+            t,
+            box,
+            tipText = series.getTooltipText(e),
+            // The running y value for the text elements
+            yRunning = 0,
+            // The maximum bounds of the text elements
+            w = 0,
+            h = 0,
+            // Values to shift the popup
+            translateX,
+            translateY,
+            transformer,
+            offset,
+            transformPoint = function (x, y) {
+                var matrix = selectedShape.node().getCTM(),
+                    position = chart.svg.node().createSVGPoint();
+                position.x = x || 0;
+                position.y = y || 0;
+                return position.matrixTransform(matrix);
+            };
+
+        if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
+            chart._tooltipGroup.remove();
+        }
+        chart._tooltipGroup = chart.svg.append("g");
+
+        if (!series.p) {
+
+            offset = (series._isStacked() ? 1 : width / 2);
+
+            // Add a drop line to the x axis
+            if (!series.x._hasCategories() && dropDest.y !== null) {
+                chart._tooltipGroup.append("line")
+                    .attr("x1", (x < series.x._origin ? x + offset : x + width - offset))
+                    .attr("y1", (y < dropDest.y ? y + height : y))
+                    .attr("x2", (x < series.x._origin ? x + offset : x + width - offset))
+                    .attr("y2", (y < dropDest.y ? y + height : y))
+                    .style("fill", "none")
+                    .style("stroke", fill)
+                    .style("stroke-width", 2)
+                    .style("stroke-dasharray", ("3, 3"))
+                    .style("opacity", opacity)
+                    .transition()
+                    .delay(animDuration / 2)
+                    .duration(animDuration / 2)
+                    .ease("linear")
+                    // Added 1px offset to cater for svg issue where a transparent
+                    // group overlapping a line can sometimes hide it in some browsers
+                    // Issue #10
+                    .attr("y2", (y < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
+            }
+
+            offset = (series._isStacked() ? 1 : height / 2);
+
+            // Add a drop line to the y axis
+            if (!series.y._hasCategories() && dropDest.x !== null) {
+                chart._tooltipGroup.append("line")
+                    .attr("x1", (x < dropDest.x ? x + width : x))
+                    .attr("y1", (y < series.y._origin ? y + offset : y + height - offset))
+                    .attr("x2", (x < dropDest.x ? x + width : x))
+                    .attr("y2", (y < series.y._origin ? y + offset : y + height - offset))
+                    .style("fill", "none")
+                    .style("stroke", fill)
+                    .style("stroke-width", 2)
+                    .style("stroke-dasharray", ("3, 3"))
+                    .style("opacity", opacity)
+                    .transition()
+                    .delay(animDuration / 2)
+                    .duration(animDuration / 2)
+                    .ease("linear")
+                    // Added 1px offset to cater for svg issue where a transparent
+                    // group overlapping a line can sometimes hide it in some browsers
+                    // Issue #10
+                    .attr("x2", (x < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
+            }
+
+        }
+
+        // Add a group for text
+        t = chart._tooltipGroup.append("g");
+        // Create a box for the popup in the text group
+        box = t.append("rect")
+            .attr("class", "dimple-tooltip");
+
+        // Create a text object for every row in the popup
+        t.selectAll(".dimple-dont-select-any").data(tipText).enter()
+            .append("text")
+            .attr("class", "dimple-tooltip")
+            .text(function (d) { return d; })
+            .style("font-family", series.tooltipFontFamily)
+            .style("font-size", series._getTooltipFontSize());
+
+        // Get the max height and width of the text items
+        t.each(function () {
+            w = (this.getBBox().width > w ? this.getBBox().width : w);
+            h = (this.getBBox().width > h ? this.getBBox().height : h);
+        });
+
+        // Position the text relative to the bar, the absolute positioning
+        // will be done by translating the group
+        t.selectAll("text")
+            .attr("x", 0)
+            .attr("y", function () {
+                // Increment the y position
+                yRunning += this.getBBox().height;
+                // Position the text at the centre point
+                return yRunning - (this.getBBox().height / 2);
+            });
+
+        // Draw the box with a margin around the text
+        box.attr("x", -textMargin)
+            .attr("y", -textMargin)
+            .attr("height", Math.floor(yRunning + textMargin) - 0.5)
+            .attr("width", w + 2 * textMargin)
+            .attr("rx", 5)
+            .attr("ry", 5)
+            .style("fill", popupFillColor)
+            .style("stroke", popupStrokeColor)
+            .style("stroke-width", 2)
+            .style("opacity", 0.95);
+
+        // Shift the popup around to avoid overlapping the svg edge
+        if (transformPoint(x + width + textMargin + popupMargin + w).x < parseFloat(chart.svg.node().getBBox().width)) {
+            // Draw centre right
+            translateX = (x + width + textMargin + popupMargin);
+            translateY = (y + (height / 2) - ((yRunning - (h - textMargin)) / 2));
+        } else if (transformPoint(x - (textMargin + popupMargin + w)).x > 0) {
+            // Draw centre left
+            translateX = (x - (textMargin + popupMargin + w));
+            translateY = (y + (height / 2) - ((yRunning - (h - textMargin)) / 2));
+        } else if (transformPoint(0, y + height + yRunning + popupMargin + textMargin).y < parseFloat(chart.svg.node().getBBox().height)) {
+            // Draw centre below
+            translateX = (x + (width / 2) - (2 * textMargin + w) / 2);
+            translateX = (translateX > 0 ? translateX : popupMargin);
+            translateX = (translateX + w < parseFloat(chart.svg.node().getBBox().width) ? translateX : parseFloat(chart.svg.node().getBBox().width) - w - popupMargin);
+            translateY = (y + height + 2 * textMargin);
+        } else {
+            // Draw centre above
+            translateX = (x + (width / 2) - (2 * textMargin + w) / 2);
+            translateX = (translateX > 0 ? translateX : popupMargin);
+            translateX = (translateX + w < parseFloat(chart.svg.node().getBBox().width) ? translateX : parseFloat(chart.svg.node().getBBox().width) - w - popupMargin);
+            translateY = (y - yRunning - (h - textMargin));
+        }
+        transformer = transformPoint(translateX, translateY);
+        t.attr("transform", "translate(" + transformer.x + " , " + transformer.y + ")");
+    };
+    // Copyright: 2014 PMSI-AlignAlytics
+    // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
+    // Source: /src/methods/_showPointTooltip.js
+    dimple._showPointTooltip = function (e, shape, chart, series) {
+
+        // The margin between the text and the box
+        var textMargin = 5,
+        // The margin between the ring and the popup
+            popupMargin = 10,
+        // The popup animation duration in ms
+            animDuration = 750,
+        // Collect some facts about the highlighted bubble
+            selectedShape = d3.select(shape),
+            cx = parseFloat(selectedShape.attr("cx")),
+            cy = parseFloat(selectedShape.attr("cy")),
+            r = parseFloat(selectedShape.attr("r")),
+            opacity = dimple._helpers.opacity(e, chart, series),
+            fill = selectedShape.attr("stroke"),
+            dropDest = series._dropLineOrigin(),
+        // Fade the popup stroke mixing the shape fill with 60% white
+            popupStrokeColor = d3.rgb(
+                d3.rgb(fill).r + 0.6 * (255 - d3.rgb(fill).r),
+                d3.rgb(fill).g + 0.6 * (255 - d3.rgb(fill).g),
+                d3.rgb(fill).b + 0.6 * (255 - d3.rgb(fill).b)
+            ),
+        // Fade the popup fill mixing the shape fill with 80% white
+            popupFillColor = d3.rgb(
+                d3.rgb(fill).r + 0.8 * (255 - d3.rgb(fill).r),
+                d3.rgb(fill).g + 0.8 * (255 - d3.rgb(fill).g),
+                d3.rgb(fill).b + 0.8 * (255 - d3.rgb(fill).b)
+            ),
+        // The running y value for the text elements
+            y = 0,
+        // The maximum bounds of the text elements
+            w = 0,
+            h = 0,
+            t,
+            box,
+            tipText = series.getTooltipText(e),
+            translateX,
+            translateY;
+
+        if (chart._tooltipGroup !== null && chart._tooltipGroup !== undefined) {
+            chart._tooltipGroup.remove();
+        }
+        chart._tooltipGroup = chart.svg.append("g");
+
+        // Add a ring around the data point
+        chart._tooltipGroup.append("circle")
+            .attr("cx", cx)
+            .attr("cy", cy)
+            .attr("r", r)
+            .attr("opacity", 0)
+            .style("fill", "none")
+            .style("stroke", fill)
+            .style("stroke-width", 1)
+            .transition()
+            .duration(animDuration / 2)
+            .ease("linear")
+            .attr("opacity", 1)
+            .attr("r", r + series.lineWeight + 2)
+            .style("stroke-width", 2);
+
+        // Add a drop line to the x axis
+        if (dropDest.y !== null) {
+            chart._tooltipGroup.append("line")
+                .attr("x1", cx)
+                .attr("y1", (cy < dropDest.y ? cy + r + series.lineWeight + 2 : cy - r - series.lineWeight - 2))
+                .attr("x2", cx)
+                .attr("y2", (cy < dropDest.y ? cy + r + series.lineWeight + 2 : cy - r - series.lineWeight - 2))
+                .style("fill", "none")
+                .style("stroke", fill)
+                .style("stroke-width", 2)
+                .style("stroke-dasharray", ("3, 3"))
+                .style("opacity", opacity)
+                .transition()
+                .delay(animDuration / 2)
+                .duration(animDuration / 2)
+                .ease("linear")
+                // Added 1px offset to cater for svg issue where a transparent
+                // group overlapping a line can sometimes hide it in some browsers
+                // Issue #10
+                .attr("y2", (cy < dropDest.y ? dropDest.y - 1 : dropDest.y + 1));
+        }
+
+        // Add a drop line to the y axis
+        if (dropDest.x !== null) {
+            chart._tooltipGroup.append("line")
+                .attr("x1", (cx < dropDest.x ? cx + r + series.lineWeight + 2 : cx - r - series.lineWeight - 2))
+                .attr("y1", cy)
+                .attr("x2", (cx < dropDest.x ? cx + r + series.lineWeight + 2 : cx - r - series.lineWeight - 2))
+                .attr("y2", cy)
+                .style("fill", "none")
+                .style("stroke", fill)
+                .style("stroke-width", 2)
+                .style("stroke-dasharray", ("3, 3"))
+                .style("opacity", opacity)
+                .transition()
+                .delay(animDuration / 2)
+                .duration(animDuration / 2)
+                .ease("linear")
+                // Added 1px offset to cater for svg issue where a transparent
+                // group overlapping a line can sometimes hide it in some browsers
+                // Issue #10
+                .attr("x2", (cx < dropDest.x ? dropDest.x - 1 : dropDest.x + 1));
+        }
+
+        // Add a group for text
+        t = chart._tooltipGroup.append("g");
+        // Create a box for the popup in the text group
+        box = t.append("rect")
+            .attr("class", "dimple-tooltip");
+
+        // Create a text object for every row in the popup
+        t.selectAll(".dont-select-any").data(tipText).enter()
+            .append("text")
+            .attr("class", "dimple-tooltip")
+            .text(function (d) { return d; })
+            .style("font-family", series.tooltipFontFamily)
+            .style("font-size", series._getTooltipFontSize());
+
+        // Get the max height and width of the text items
+        t.each(function () {
+            w = (this.getBBox().width > w ? this.getBBox().width : w);
+            h = (this.getBBox().width > h ? this.getBBox().height : h);
+        });
+
+        // Position the text relative to the bubble, the absolute positioning
+        // will be done by translating the group
+        t.selectAll("text")
+            .attr("x", 0)
+            .attr("y", function () {
+                // Increment the y position
+                y += this.getBBox().height;
+                // Position the text at the centre point
+                return y - (this.getBBox().height / 2);
+            });
+
+        // Draw the box with a margin around the text
+        box.attr("x", -textMargin)
+            .attr("y", -textMargin)
+            .attr("height", Math.floor(y + textMargin) - 0.5)
+            .attr("width", w + 2 * textMargin)
+            .attr("rx", 5)
+            .attr("ry", 5)
+            .style("fill", popupFillColor)
+            .style("stroke", popupStrokeColor)
+            .style("stroke-width", 2)
+            .style("opacity", 0.95);
+
+        // Shift the popup around to avoid overlapping the svg edge
+        if (cx + r + textMargin + popupMargin + w < parseFloat(chart.svg.node().getBBox().width)) {
+            // Draw centre right
+            translateX = (cx + r + textMargin + popupMargin);
+            translateY = (cy - ((y - (h - textMargin)) / 2));
+        } else if (cx - r - (textMargin + popupMargin + w) > 0) {
+            // Draw centre left
+            translateX = (cx - r - (textMargin + popupMargin + w));
+            translateY = (cy - ((y - (h - textMargin)) / 2));
+        } else if (cy + r + y + popupMargin + textMargin < parseFloat(chart.svg.node().getBBox().height)) {
+            // Draw centre below
+            translateX = (cx - (2 * textMargin + w) / 2);
+            translateX = (translateX > 0 ? translateX : popupMargin);
+            translateX = (translateX + w < parseFloat(chart.svg.node().getBBox().width) ? translateX : parseFloat(chart.svg.node().getBBox().width) - w - popupMargin);
+            translateY = (cy + r + 2 * textMargin);
+        } else {
+            // Draw centre above
+            translateX = (cx - (2 * textMargin + w) / 2);
+            translateX = (translateX > 0 ? translateX : popupMargin);
+            translateX = (translateX + w < parseFloat(chart.svg.node().getBBox().width) ? translateX : parseFloat(chart.svg.node().getBBox().width) - w - popupMargin);
+            translateY = (cy - y - (h - textMargin));
+        }
+        t.attr("transform", "translate(" + translateX + " , " + translateY + ")");
+    };
+
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/filterData.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple#wiki-filterData
@@ -4391,7 +5221,7 @@ window.dimple = dimple;
     };
 
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/getUniqueValues.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple#wiki-getUniqueValues
@@ -4419,7 +5249,7 @@ window.dimple = dimple;
         return returnlist;
     };
 
-    // Copyright: 2013 PMSI-AlignAlytics
+    // Copyright: 2014 PMSI-AlignAlytics
     // License: "https://github.com/PMSI-AlignAlytics/dimple/blob/master/MIT-LICENSE.txt"
     // Source: /src/methods/newSvg.js
     // Help: http://github.com/PMSI-AlignAlytics/dimple/wiki/dimple#wiki-newSvg
@@ -4436,5 +5266,7 @@ window.dimple = dimple;
     };
 
 
-}());
+
+    return dimple;
+}));
 // End dimple
