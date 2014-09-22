@@ -1,5 +1,5 @@
 {
-  "name": "dimple",
+  "name": "sergeyt:dimple",
   "description": "dimple - an object-oriented API for business analytics powered by d3.",
   "homepage": "https://github.com/sergeyt/meteor-dimple",
   "author": "Sergey Todyshev <stodyshev@gmail.com>",
