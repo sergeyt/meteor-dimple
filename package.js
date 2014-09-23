@@ -6,7 +6,8 @@ Package.describe({
 });
 
 Package.onUse(function(api){
+  var client = ["client"];
   api.versionsFrom("METEOR@0.9.1");
-  api.addFiles("dimple.js", "client");
+  api.addFiles("dimple.js", client);
 });
 
