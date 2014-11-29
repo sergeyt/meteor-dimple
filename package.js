@@ -8,6 +8,6 @@ Package.describe({
 Package.onUse(function(api){
   var client = ["client"];
   api.versionsFrom("METEOR@1.0");
-  api.use(['d3js:d3'], 'client');
+  api.use(['d3js:d3@3.4.13'], 'client');
   api.addFiles("dimple.js", client);
 });
