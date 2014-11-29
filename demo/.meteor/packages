@@ -6,5 +6,5 @@
 standard-app-packages
 autopublish
 insecure
-d3
+d3js:d3
 sergeyt:dimple
